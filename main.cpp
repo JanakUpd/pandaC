@@ -59,18 +59,19 @@ class Compiler {
         static std::vector<std::string> split(std::string content, char symb) {
             std::vector<std::string> res;
             res.reserve(count(content, symb) + 1);
-            size_t start = 0;
-            size_t end = content.find(symb);
-            while (end != std::string::npos) {
-                res.push_back(content.substr(start, end - start));
-                end = content.find(symb, start);
-                start = end + 1;
+            for (auto it = content.begin(); it != content.end(); ++it) {
+                std::string temp;
+                bool isString = false;
+                while (it != content.end() && (*it != symb || isString)) {
+                    if (*it == '"' or *it == '\'')
+                        isString = !isString;
+                    temp += *it;
+                    ++it;
+                }
+                res.push_back(temp);
+                if (it == content.end())
+                    break;
             }
-            //TODO: add check for string between symbs
-            res.push_back(content.substr(start));
-            // for (auto& item : res) {
-            //     std::cout << "SPLIT ITEM: " << item << std::endl;
-            // }
             return res;
         }
         static std::string findCurrentBlock(std::string& content) {
@@ -94,10 +95,15 @@ class Compiler {
         static std::string processPrint(std::string& content) {
             cppLibrariesUsed.emplace("iostream");
             auto params = getParams(content);
+            for (auto& item : params) {
+                std::cout << "PRINT PARAM: " << item << std::endl;
+            }
+            std::cout << "TOTAL PARAMS: " << params.size() << std::endl;
             switch (params.size()) {
                 case 1:
                     return "std::cout << " + params[0] + " << std::endl;\n";
                 case 2:
+                    std::cout << "PARAMS 2: " << params[0] << " | " << params[1] << std::endl;
                     return "std::cout << " + params[0] + " << " + params[1] + ";\n";
                 default:
                     return "";
