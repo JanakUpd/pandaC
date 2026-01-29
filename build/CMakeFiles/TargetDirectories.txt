@@ -1,0 +1,3 @@
+/Users/janak/Documents/Workspace/pandaC/build/CMakeFiles/pandaC.dir
+/Users/janak/Documents/Workspace/pandaC/build/CMakeFiles/edit_cache.dir
+/Users/janak/Documents/Workspace/pandaC/build/CMakeFiles/rebuild_cache.dir

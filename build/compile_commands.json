@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/Users/janak/Documents/Workspace/pandaC/build",
+  "command": "/usr/bin/clang++ -g -std=gnu++20 -arch arm64 -o CMakeFiles/pandaC.dir/main.cpp.o -c /Users/janak/Documents/Workspace/pandaC/main.cpp",
+  "file": "/Users/janak/Documents/Workspace/pandaC/main.cpp",
+  "output": "/Users/janak/Documents/Workspace/pandaC/build/CMakeFiles/pandaC.dir/main.cpp.o"
+}
+]

@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/janak/Documents/Workspace/pandaC/main'
+relocations:     []
+...
