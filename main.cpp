@@ -80,10 +80,14 @@ class Compiler {
         static std::vector<std::string> getParams(std::string& content) {
             return split(content.substr(content.find('(') + 1, content.find(')') - content.find('(') - 1), ',');
         }
+        static std::string getParam(std::string& content) {
+            return content.substr(content.find('(') + 1, content.find(')') - content.find('(') - 1);
+        }
     public:
         static std::set<std::string> cppLibrariesUsed;
         static std::string processIf(std::string& content) {
-            std::string intermediateCode = "";
+            auto param = getParam(content);
+
             return "";
         }
         static std::string processElse(std::string& content) {
@@ -101,10 +105,10 @@ class Compiler {
             std::cout << "TOTAL PARAMS: " << params.size() << std::endl;
             switch (params.size()) {
                 case 1:
-                    return "std::cout << " + params[0] + " << std::endl;\n";
+                    return "\tstd::cout << " + params[0] + " << std::endl;\n";
                 case 2:
                     std::cout << "PARAMS 2: " << params[0] << " | " << params[1] << std::endl;
-                    return "std::cout << " + params[0] + " << " + params[1] + ";\n";
+                    return "\tstd::cout << " + params[0] + " << " + params[1] + ";\n";
                 default:
                     return "";
             }
@@ -145,7 +149,7 @@ public:
         }
 
         if (mainCode.find("int main()") == std::string::npos)
-            mainCode = "int main() {\n" + mainCode + "\nreturn 0;\n}";
+            mainCode = "int main() {\n" + mainCode + "\treturn 0;\n}";
 
         std::ofstream out("pandaC.cpp");
 
