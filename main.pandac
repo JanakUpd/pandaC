@@ -1,8 +1,0 @@
-using math
-
-def main():
-    print("goyda")
-
-
-for(int i = 0; i < 5; ++i):
-    print("goyda")
