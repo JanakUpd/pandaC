@@ -1,8 +1,12 @@
 #include <iostream>
 #include <fstream>
+#include <regex>
 #include <vector>
 #include <string>
 #include <set>
+#include <list>
+#include <chrono>
+
 
 enum class ERROR_TYPE {
     FILE_NOT_FOUND,
@@ -38,94 +42,66 @@ public:
 };
 
 class Compiler {
-    using ProcessingFunc = std::string(*)(std::vector<std::string>*);
     enum class Parameters {
-        Bracketing,
-        Spacing,
-        None
+        Bracketing = 1,
+        Spacing = 2,
+        None = 0
     };
+    enum class VarType {
+        None = 0,
+        Integer = 1,
+        FloatingPoint = 2,
+        String = 4,
+        Boolean = 8
+    };
+    struct TypeBinder {
+        std::string cppName;
+        std::string pandacName;
+        VarType varType;
+        size_t convertibleTo;
+        TypeBinder(std::string cppName, std::string pandacName, VarType varType, size_t convertibleTo)
+            : cppName(cppName), pandacName(pandacName), varType(varType), convertibleTo(convertibleTo) {}
+    };
+    struct Variable {
+        VarType varType;
+        std::string name;
+        size_t depth;
+        Variable(std::string name, VarType varType, size_t depth)
+            : name(name), varType(varType), depth(depth) {}
+    };
+    using ProcessingFunc = std::string(*)(std::vector<std::string>*, std::vector<TypeBinder>*);
     struct Keyword {
         ProcessingFunc processing;
-        Parameters params;
+        size_t params;
         std::string name;
-        Keyword(std::string name, ProcessingFunc processing, Parameters params = Parameters::None)
+        Keyword(std::string name, ProcessingFunc processing, size_t params = 0)
             : name(std::move(name)), processing(processing), params(params) {}
     };
     class CodeConvertionClass {
     private:
-        static size_t count(std::string& content, char symb) {
-            size_t res = 0;
-            for (size_t i = 0; i < content.length(); ++i)
-                if (content[i] == symb)
-                    ++res;
-            return res;
-        }
-        static std::vector<std::string> split(std::string content, char symb) {
-            std::vector<std::string> res;
-            res.reserve(count(content, symb) + 1);
-            for (auto it = content.begin(); it != content.end(); ++it) {
-                std::string temp;
-                bool isString = false;
-                while (it != content.end() && (*it != symb || isString)) {
-                    if (*it == '"' or *it == '\'')
-                        isString = !isString;
-                    temp += *it;
-                    ++it;
-                }
-                res.push_back(temp);
-                if (it == content.end())
-                    break;
-            }
-            return res;
-        }
-        // static std::string findCurrentBlock(std::string& content) {
-        //
-        //     return "";
-        // }
-        // static std::vector<std::string> getParams(std::string& content) {
-        //     return split(content.substr(content.find('(') + 1, content.rfind(')') - content.find('(') - 1), ',');
-        // }
-        // static std::string getParam(std::string& content) {
-        //     return content.substr(content.find('(') + 1, content.find(')') - content.find('(') - 1);
-        // }
-        // static size_t countIndentation(const std::string& line) {
-        //     size_t count = 0;
-        //     for (auto it = line.begin(); it != line.end(); ++it) {
-        //         if (*it == ' ')
-        //             ++count;
-        //         else if (*it == '\t')
-        //             count += 4;
-        //         else
-        //             return count;
-        //     }
-        //     return count;
-        // }
-        // static std::string currIndentation(const std::string& line) {
-        //     std::string res;
-        //     for (auto it = line.begin(); it != line.end(); ++it) {
-        //         if (*it == ' ')
-        //             res += ' ';
-        //         else if (*it == '\t')
-        //             res += "    ";
-        //         else
-        //             return res;
-        //     }
-        //     return res;
-        // }
         static std::string createIndentation(size_t ind) {
             std::string res;
             for (size_t i = 0; i < ind; ++i)
                 res += ' ';
             return res;
         }
-        static const Keyword& containsKeyword(std::string& s, const std::vector<Keyword>& keywords) {
+        static const Keyword& findKeyword(std::string& s, const std::vector<Keyword>& keywords) {
             for (auto& item : keywords)
-                if (s.size() >= item.name.size() && s.substr(s.size()-item.name.size(), item.name.size()) == item.name)
+                // if (s.size() >= item.name.size() && s.substr(s.size()-item.name.size(), item.name.size()) == item.name)
+                //     return item;
+                if (s.ends_with(item.name))
                     return item;
             return keywords.back();
         }
+        static const TypeBinder& findTypeBinder(std::string& s, const std::vector<TypeBinder>& typeBinders) {
+            for (auto& item : typeBinders)
+                if (s.size() >= item.pandacName.size() && s.substr(s.size() - item.pandacName.size(), item.pandacName.size()) == item.pandacName)
+                    return item;
+            return typeBinders.back();
+        }
     public:
-        static std::string convert(std::ifstream& in, const std::vector<Keyword>& keywords, const size_t currIndent = 0) {
+        static std::string convert(std::ifstream& in, const std::vector<Keyword>& keywords, std::vector<TypeBinder>& typeBinders) {
+            std::list<Variable> variables;
             std::string content, currContent;
             char c, prevC;
             std::string line;
@@ -141,133 +117,97 @@ class Compiler {
                         stringFlag = !stringFlag;
                         cnstString += '"'; //to unify string and char
                         //cnstString += c; //not to unify
+                        if (!stringFlag)
+                            currContent += cnstString;
                     }
                     else if (stringFlag) {
                         cnstString += c;
                     }
                     else if (c != '\n' ) {
                         line += c;
-                        auto& keyword = containsKeyword(line, keywords);
-                        if (keyword.name != "") {
-                            switch (keyword.params) {
-                                case Parameters::None:
-                                    //std::cout << "[line]: " << line << " [content]: " << currContent << " ";
-                                    currContent += keyword.processing(nullptr);
-                                    //std::cout << currContent << std::endl;
-                                    break;
-                                case Parameters::Spacing: {
-                                    std::vector<std::string> params;
-                                    std::string buffer = "";
-                                    while (in.get(c)) {
-                                        if (c == '\n') {
-                                            // prevIndCount = indCount;
-                                            // indCount = 0;
-                                            // indFlag = true;
-                                            params.push_back(buffer);
-                                            currContent += keyword.processing(&params);
-                                            currContent = createIndentation(indCount) + currContent;
-                                            //std::cout << currContent << " ";
-                                            if (indCount < prevIndCount) {
-                                                std::string buffer = "";
-                                                for (size_t i = indCount; i < prevIndCount; i+=4)
-                                                    buffer += createIndentation(i - indCount) + "}\n";
-                                                currContent = createIndentation(indCount) + buffer + currContent;
-                                            }
-                                            //std::cout << currContent << std::endl;
-                                            prevIndCount = indCount;
-                                            indCount = 0;
-                                            indFlag = true;
-                                            line = "";
-                                            content += currContent;
-                                            currContent = "";
-                                            lineConsumed = false;
-                                            break;
+                        auto& keyword = findKeyword(line, keywords);
+                        if (&keyword != &keywords.back() && keyword.name != "") {
+                            if (keyword.params == 0)
+                                currContent += keyword.processing(nullptr, &typeBinders);
+                            if ((keyword.params & (size_t)Parameters::Spacing) != 0) {
+                                std::vector<std::string> params;
+                                std::string buffer = "";
+                                while (in.get(c)) {
+                                    if (c == '\n') {
+                                        params.push_back(buffer);
+                                        currContent += keyword.processing(&params, &typeBinders);
+                                        currContent = createIndentation(indCount) + currContent;
+                                        if (indCount < prevIndCount) {
+                                            std::string buffer = "";
+                                            for (size_t i = indCount; i < prevIndCount; i+=4)
+                                                buffer += createIndentation(i - indCount) + "}\n";
+                                            currContent = createIndentation(indCount) + buffer + currContent;
                                         }
-                                        if (c == ':' || c == '(' || c == ')') {
-                                            params.push_back(buffer);
-                                            currContent += keyword.processing(&params);
-                                            break;
-                                        }
-                                        if (c != ' ')
-                                            buffer += c;
-                                        else if (buffer != ""){
-                                            params.push_back(buffer);
-                                            buffer = "";
-                                        }
-                                        prevC = c;
+                                        prevIndCount = indCount;
+                                        indCount = 0;
+                                        indFlag = true;
+                                        line = "";
+                                        content += currContent;
+                                        currContent = "";
+                                        lineConsumed = false;
+                                        break;
                                     }
-                                    //std::cout << "[][][" << currContent << "][][]" << std::endl;
-                                    // for (auto& item : params) {
-                                    //     std::cout << "[0][" << item << "][0]" << std::endl;
-                                    // }
-                                    //currContent += keyword.processing(line, &params);
-                                    //std::cout << "[][][][" << currContent << "][][][]" << std::endl;
-                                }
-                                    break;
-                                // case Parameters::Bracketing: {
-                                //     std::vector<std::string> params;
-                                //     std::string buffer = "";
-                                //     bool isReadingParams = false;
-                                //     while (in.get(c)) {
-                                //         if (c == ')') {
-                                //             params.push_back(buffer);
-                                //             break;
-                                //         }
-                                //         if (isReadingParams) {
-                                //             if (c != ',')
-                                //                 buffer += c;
-                                //             else {
-                                //                 params.push_back(buffer);
-                                //                 buffer = "";
-                                //             }
-                                //         }
-                                //         if (c == '(') isReadingParams = true;
-                                //         prevC = c;
-                                //     }
-                                //     currContent += keyword.processing(line, &params);
-                                //     }
-                                //     break;
-                                case Parameters::Bracketing: {
-                                    std::vector<std::string> params;
-                                    std::string buffer;
-                                    int depth = 0;
-                                    bool started = false;
-                                    while (in.get(c)) {
-                                        if (c == '(') {
-                                            ++depth;
-                                            started = true;
-                                            if (depth > 1)
-                                                buffer += c;
-                                        }
-                                        else if (c == ')') {
-                                            --depth;
-                                            if (depth == 0) {
-                                                params.push_back(buffer);
-                                                break;
-                                            }
-                                            buffer += c;
-                                        }
-                                        else if (started) buffer += c;
-                                        prevC = c;
+                                    if (c == ':' || c == '(' || c == ')') {
+                                        params.push_back(buffer);
+                                        currContent += keyword.processing(&params, &typeBinders);
+                                        break;
                                     }
-                                    currContent += keyword.processing(&params);
+                                    if (c != ' ')
+                                        buffer += c;
+                                    else if (buffer != ""){
+                                        params.push_back(buffer);
+                                        buffer = "";
+                                    }
+                                    prevC = c;
                                 }
-                                    break;
-
                             }
+                            if ((keyword.params & (size_t)Parameters::Bracketing) != 0) {
+                                std::vector<std::string> params;
+                                std::string buffer;
+                                int depth = 0;
+                                bool started = false;
+                                while (in.get(c)) {
+                                    if (c == '(') {
+                                        ++depth;
+                                        started = true;
+                                        if (depth > 1)
+                                            buffer += c;
+                                    }
+                                    else if (c == ')') {
+                                        --depth;
+                                        if (depth == 0) {
+                                            params.push_back(buffer);
+                                            break;
+                                        }
+                                        buffer += c;
+                                    }
+                                    else if (started)
+                                        buffer += c;
+                                    prevC = c;
+                                }
+                                currContent += keyword.processing(&params, &typeBinders);
+                            }
+
                             lineConsumed = true;
                         }
+                        //TODO: PLACE IF FOR TYPES :))
+                        // if () {
+                        //
+                        // }
                     }
                     else {
                         currContent = createIndentation(indCount) + currContent;
-                        //std::cout << currContent << " ";
                         if (indCount < prevIndCount) {
                             std::string buffer = "";
                             for (size_t i = indCount; i < prevIndCount; i+=4)
                                 buffer += createIndentation(i - indCount) + "}\n";
                             currContent = createIndentation(indCount) + buffer + currContent;
                         }
-                        //std::cout << currContent << std::endl;
                         prevIndCount = indCount;
                         indCount = 0;
                         indFlag = true;
@@ -289,10 +229,10 @@ class Compiler {
             }
             if (line != "") {
                 if (!lineConsumed) {
-                    auto& keyword = containsKeyword(line, keywords);
+                    auto& keyword = findKeyword(line, keywords);
                     if (keyword.name != "") {
-                        if (keyword.params == Parameters::None) {
-                            currContent += keyword.processing(nullptr);
+                        if (keyword.params == 0) {
+                            currContent += keyword.processing(nullptr, &typeBinders);
                         }
                     }
                 }
@@ -315,72 +255,45 @@ class Compiler {
                 content += buffer;
             }
             return content;
-            // std::string s;
-            // std::string mainCode = "";
-            // auto pos = in.tellg();
-            // while (getline(in, s)) {
-            //     size_t indentation = countIndentation(s);
-            //     if (indentation < currIndent) {
-            //         in.seekg(pos);
-            //         return mainCode;
-            //     }
-            //     for (const auto& keyword : keywords) {
-            //         if (s.find(keyword.name, 0) != std::string::npos) {
-            //             mainCode += keyword.processing(s);
-            //             if (keyword.hasBlock)
-            //                 mainCode += convert(in, keywords, indentation+4) + currIndentation(s) + "}\n";
-            //             break;
-            //         }
-            //     }
-            //     pos = in.tellg();
-            // }
-            //
-            // return mainCode;
         }
         static std::set<std::string> cppLibrariesUsed;
-        static std::string processDef(std::vector<std::string>* params) {
+        static std::string processDef(std::vector<std::string>* params, std::vector<TypeBinder>* typeBinders) {
             if (params->back().find("main") !=  std::string::npos)
                 return "int main() {\n";
             switch (params->size()) {
                 case 1:
                     return "void " + (*params)[0] + "() {\n";
-                case 2:
-                    return (*params)[0] + " " + (*params)[1] + "() {\n";
+                case 2: {
+                    std::string type = "";
+                    for (auto& item : *typeBinders)
+                        if ((*params)[0] == item.pandacName) {
+                            type = item.cppName;
+                            break;
+                        }
+                    return type + " " + (*params)[1] + "() {\n";
+                }
                 default:
-                    std::cout << "[ERROR]: function had " << params->size() << " parameters"<< std::endl;
+                    Notifier::notifyError(ERROR_TYPE::SYNTAX_ERROR);
+                    std::cout << "[ERROR]: function had " << params->size() << " defining"<< std::endl;
+                    break;
             }
-            // auto args = getParams(content);
-            // //check if def int func() {} or def func() {} - has returning type or not
-            // std::string returnType, funcName;
-            // if (content.find(" ", content.find("def ")+4) == std::string::npos || content.find("(", content.find("def ")+4) > content.find(" ", content.find("def ")+4)) {
-            //     returnType = "void";
-            //     funcName = content.substr(content.find("def ")+4, content.find("(", content.find("def ")+4) - content.find("def ")+4);
-            // }
-            // else {
-            //     returnType = content.substr(content.find("def ")+4, content.find(" ", content.find("def ")+4) - content.find("def "));
-            //     funcName = content.substr(content.find(" ", content.find("def ")+4)+1, content.find("(", content.find(" ", content.find("def ")+4)+1));
-            //     //funcName = content.substr(content.find(" ", content.find("def ")+4)+1, content.find("(", content.find("def ")+4) - content.find(" ", content.find("def ")+4)-1);
-            // }
-            // return returnType + " " + funcName + "() {\n";
         }
-        static std::string processReturn(std::vector<std::string>* params) {
+        static std::string processReturn(std::vector<std::string>* params,  std::vector<TypeBinder>* typeBinders) {
             switch (params->size()) {
-                case 0:
-                    return "return;\n";
-                case 1:
-                    return "return " + (*params)[0] + ";\n";
+                case 1: return "return " + (*params)[0] + ";\n";
+                default: return "return;\n";
             }
         }
-        static std::string processIf(std::vector<std::string>* params) {
+        static std::string processIf(std::vector<std::string>* params, std::vector<TypeBinder>* typeBinders) {
             return "if (" + (*params)[0] + ") {\n";
         }
-        static std::string processElse(std::vector<std::string>* params) {
+        static std::string processElse(std::vector<std::string>* params, std::vector<TypeBinder>* typeBinders) {
             return "else {\n";
         }
-        static std::string processFor(std::vector<std::string>* params) {
+        static std::string processFor(std::vector<std::string>* params, std::vector<TypeBinder>* typeBinders) {
             return "";
         };
-        static std::string processPrint(std::vector<std::string>* params) {
+        static std::string processPrint(std::vector<std::string>* params, std::vector<TypeBinder>* typeBinders) {
             cppLibrariesUsed.emplace("iostream");
             switch ((*params).size()) {
                 case 1:
@@ -388,6 +301,7 @@ class Compiler {
                 case 2:
                     return "std::cout << " + (*params)[0] + " << " + (*params)[1] + ";\n";
                 default:
+                    Notifier::notifyError(ERROR_TYPE::SYNTAX_ERROR);
                     return "";
             }
         }
@@ -413,26 +327,36 @@ class Compiler {
     }
 public:
     int run(std::string file) {
+        auto start_time = std::chrono::high_resolution_clock::now();
         if(!isFileValid(file)) {
             Notifier::notifyError(ERROR_TYPE::FILE_NOT_FOUND);
             return 1;
         }
         Notifier::notifyInfo("Compiling file: " + file);
+
         std::vector<Keyword> keywords;
-        keywords.emplace_back("if", &CodeConvertionClass::processIf, Parameters::Bracketing);
+        keywords.emplace_back("if", &CodeConvertionClass::processIf, (size_t)Parameters::Bracketing);
         keywords.emplace_back("else", &CodeConvertionClass::processElse);
-        keywords.emplace_back("return", &CodeConvertionClass::processReturn, Parameters::Spacing);
+        keywords.emplace_back("return", &CodeConvertionClass::processReturn, (size_t)Parameters::Spacing);
         // keywords.emplace_back("for", &CodeConvertionClass::processFor);
-        keywords.emplace_back("print", &CodeConvertionClass::processPrint, Parameters::Bracketing);
-        keywords.emplace_back("def", &CodeConvertionClass::processDef, Parameters::Spacing);
+        keywords.emplace_back("print", &CodeConvertionClass::processPrint, (size_t)Parameters::Bracketing);
+        keywords.emplace_back("def", &CodeConvertionClass::processDef, (size_t)Parameters::Spacing | (size_t)Parameters::Bracketing);
         keywords.emplace_back("", nullptr);
+
+        std::vector<TypeBinder> typeBinders;
+        typeBinders.emplace_back("int32_t", "int", VarType::Integer, (size_t)VarType::Integer | (size_t)VarType::FloatingPoint | (size_t)VarType::String);
+        typeBinders.emplace_back("double", "fl2", VarType::FloatingPoint,(size_t)VarType::FloatingPoint | (size_t)VarType::String);
+        typeBinders.emplace_back("float", "fl1", VarType::FloatingPoint,(size_t)VarType::FloatingPoint | (size_t)VarType::String);
+        typeBinders.emplace_back("std::string", "str", VarType::String, (size_t)VarType::String);
+        typeBinders.emplace_back("bool", "bool", VarType::Boolean, 0);
+        typeBinders.emplace_back("", "", VarType::None, 0);
 
         std::ifstream in(file);
         if (!in) {
             Notifier::notifyError(ERROR_TYPE::FILE_NOT_FOUND);
             return 1;
         }
-        std::string mainCode = CodeConvertionClass::convert(in, keywords);
+        std::string mainCode = CodeConvertionClass::convert(in, keywords, typeBinders);
 
 
         std::ofstream out("pandaC.cpp");
@@ -447,7 +371,8 @@ public:
             return 1;
         }
 
-        Notifier::notifyInfo("Compilation finished successfully.");
+        auto duration = duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start_time);
+        Notifier::notifyInfo("Compilation finished successfully in " + (duration.count() == 0 ? "<1" : std::to_string(duration.count())) + " seconds.");
         return 0;
     }
 };
