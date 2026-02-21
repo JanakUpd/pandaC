@@ -25,23 +25,24 @@ using IntCol = std::vector<int64_t>;
 using DoubleCol = std::vector<double>;
 using BoolCol = std::vector<int8_t>;
 using StringCol = std::vector<std::string>;
+using CatCol = std::vector<size_t>;
 
-using ColumnData = std::variant<IntCol, DoubleCol, BoolCol, StringCol>;
+using ColumnData = std::variant<IntCol, DoubleCol, BoolCol, StringCol, CatCol>;
 
-enum class DType { Int, Float, Boolean, String};
+enum class DType { Int, Float, Boolean, String, Categorial};
 
 struct Column {
     std::string name;
     DType type;
     ColumnData data;
 
-    BoolCol validity_mark;
+    BoolCol validity;
 
     Column(std::string name_, DType type_, ColumnData data_)
         : name(std::move(name_)),
           type(type_),
           data(std::move(data_)),
-          validity_mark(std::visit(
+          validity(std::visit(
               [](const auto& vec) {
                   return BoolCol(vec.size(), true);
               }, data))
@@ -53,7 +54,7 @@ struct Column {
 
     void resize(size_t n) {
         std::visit([n](auto& vec) {vec.resize(n);}, data);
-        validity_mark.resize(n, true);
+        validity.resize(n, true);
     }
 };
 
