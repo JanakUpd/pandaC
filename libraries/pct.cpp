@@ -6,6 +6,21 @@
 #include <ranges>
 #include <iomanip>
 
+class StringPool {
+    std::unordered_map<std::string, size_t> string_to_id;
+    std::vector<std::string> id_to_string;
+public:
+    size_t intern(const std::string& s) {
+        auto it = string_to_id.find(s);
+        if (it!= string_to_id.end()) return it->second;
+        size_t id = id_to_string.size();
+        id_to_string.push_back(s);
+        string_to_id[s] = id;
+        return id;
+    }
+    [[nodiscard]] const std::string& get(size_t id) const { return id_to_string.at(id); }
+};
+
 using IntCol = std::vector<int64_t>;
 using DoubleCol = std::vector<double>;
 using BoolCol = std::vector<int8_t>;
