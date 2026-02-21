@@ -48,6 +48,15 @@ struct Column {
               }, data))
     {}
 
+    template <typename Op, typename Lhs, typename Rhs>
+struct BinaryExpr {
+        const Lhs& lhs;
+        const Rhs& rhs;
+        [[nodiscard]] double evaluate(size_t i) const {
+            return Op{}(lhs[i], rhs[i]);
+        }
+    };
+
     [[nodiscard]] size_t size() const {
         return std::visit([](const auto& vec) {return vec.size();}, data);
     }
