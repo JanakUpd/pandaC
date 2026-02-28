@@ -40,18 +40,18 @@ struct Column {
     ColumnData data;
     BoolCol validity;
 
-    Column(std::string name_, DType type_, ColumnData data_, size_t n_rows)
+    Column(std::string name_, DType type_, ColumnData data_, uint32_t n_rows)
         : name(std::move(name_)),
           type(type_),
           data(std::move(data_)),
           validity(n_rows, 1)
     {}
 
-    [[nodiscard]] size_t size() const {
+    [[nodiscard]] uint32_t size() const {
         return std::visit([](const auto& vec) { return vec.size(); }, data);
     }
 
-    void resize(size_t n) {
+    void resize(uint32_t n) {
         std::visit([n](auto& vec) { vec.resize(n); }, data);
         validity.resize(n, 1);
     }
@@ -61,13 +61,13 @@ template <typename Op, typename Lhs, typename Rhs>
 struct BinaryExpr {
     const Lhs& lhs;
     const Rhs& rhs;
-    [[nodiscard]] double evaluate(size_t i) const {
+    [[nodiscard]] double evaluate(uint32_t i) const {
         return Op{}(lhs[i], rhs[i]);
     }
 };
 
 struct PrinterVisitor {
-    size_t index{};
+    uint32_t index{};
     int width = 10;
 
     template<typename T>
@@ -100,14 +100,14 @@ private:
     std::vector<Column> columns;
     std::shared_ptr<StringPool> pool = std::make_shared<StringPool>();
     std::vector<std::string> row_names;
-    size_t n_rows = 0;
+    uint32_t n_rows = 0;
 
-    void ensure_consistency(size_t n) {
+    void ensure_consistency(uint32_t n) {
         if (columns.empty()) {
             n_rows = n;
             row_names.clear();
             row_names.reserve(n);
-            for (size_t i = 0; i < n; ++i) row_names.push_back(std::to_string(i));
+            for (uint32_t i = 0; i < n; ++i) row_names.push_back(std::to_string(i));
         } else if (n_rows != n) {
             throw std::runtime_error("Shape mismatch: expected " + std::to_string(n_rows) + " rows.");
         }
@@ -152,9 +152,9 @@ public:
         return 0.0;
     }
 
-    void print(size_t limit = 10) const {
+    void print(uint32_t limit = 10) const {
         if (columns.empty()) return;
-        size_t show = std::min(limit, n_rows);
+        uint32_t show = std::min(limit, n_rows);
         constexpr int col_w = 12;
         constexpr int row_w = 8;
 
@@ -162,7 +162,7 @@ public:
         for (const auto& col : columns) std::cout << std::setw(col_w) << col.name;
         std::cout << "\n" << std::string(row_w + 3 + (columns.size() * col_w), '-') << "\n";
 
-        for (size_t i = 0; i < show; ++i) {
+        for (uint32_t i = 0; i < show; ++i) {
             std::cout << std::left << std::setw(row_w) << row_names[i] << " | ";
             for (const auto& col : columns) {
                 std::visit([&]<typename T>(const T& vec) {
