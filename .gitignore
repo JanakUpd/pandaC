@@ -1,8 +1,5 @@
-/cmake-build-debug/
 /build/
 /.vscode/
-/build/
 /.idea/
 /main.dSYM/
 /.DS_Store
-/main
