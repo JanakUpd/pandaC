@@ -67,37 +67,6 @@ struct BinaryExpr {
     }
 };
 
-struct PrinterVisitor {
-    size_t index{};
-
-    template<typename T>
-    void operator()(const T& col) const {
-        if constexpr (std::is_same_v<T, BoolCol>) {
-            std::cout << std::setw(width) << (col[index] ? "true" : "false");
-        } else {
-            std::cout << std::setw(width) << col[index];
-        }
-    }
-
-    int width = 10;
-};
-
-struct SumVisitor {
-    double sum = 0.0;
-
-    template<typename T>
-    void operator()(const T& col) {
-        using ValueType = T::value_type;
-
-        if constexpr (std::is_arithmetic_v<ValueType>) {
-            for (auto v : col)
-                sum += static_cast<double>(v);
-        } else {
-            throw std::runtime_error("Cannot sum non-numeric column");
-        }
-    }
-};
-
 class DataFrame {
 private:
     std::vector<Column> columns;
@@ -154,30 +123,123 @@ public:
             return s;
         }
 
+    [[nodiscard]] size_t get_column_index(const std::string& name) const {
+        auto it = std::ranges::find(columns, name, &Column::name);
+        if (it == columns.end()) throw std::runtime_error("Column not found: " + name);
+        return std::ranges::distance(columns.begin(), it);
+    }
 
-    void print(size_t rows_limit = 10) const {
-        if (columns.empty()) {
-            std::cout << "DataFrame is empty.\n";
-            return;
+    [[nodiscard]] const Column& get_column(const std::string& name) const {
+        return columns[get_column_index(name)];
+    }
+
+    [[nodiscard]] DataFrame select(const std::vector<std::string>& col_names) const {
+        DataFrame df;
+        df.n_rows = n_rows;
+        df.row_names = row_names;
+        for (const auto& name : col_names) df.columns.push_back(get_column(name));
+        return df;
+    }
+
+    void drop(const std::string& name) {
+        columns.erase(columns.begin() + get_column_index(name));
+        if (columns.empty()) n_rows = 0;
+    }
+
+    void rename(const std::string& old_name, const std::string& new_name) {
+        columns[get_column_index(old_name)].name = new_name;
+    }
+
+    void clear() {
+        for (auto& col : columns) {
+            std::visit([](auto&& arg) { arg.clear(); }, col.data);
+            col.validity.clear();
         }
+        row_names.clear();
+        n_rows = 0;
+    }
 
-        size_t to_show = std::min(rows_limit, n_rows);
-        constexpr int col_w = 12;
-        constexpr int row_w = 8;
+    [[nodiscard]] DataFrame clone() const {
+        return *this;
+    }
 
-        std::cout << std::left << std::setw(row_w) << "RowID" << " | ";
+    [[nodiscard]] DataFrame slice(size_t offset, size_t length) const {
+        DataFrame df;
+        if (offset >= n_rows) return df;
+
+        size_t actual_len = std::min(length, n_rows - offset);
+        df.n_rows = actual_len;
+
+        df.row_names.assign(row_names.begin() + offset, row_names.begin() + offset + actual_len);
+
         for (const auto& col : columns) {
-            std::cout << std::left << std::setw(col_w) << col.name;
+            ColumnData new_data = std::visit([offset, actual_len]<typename T>(const T& arg) -> ColumnData {
+                return T(arg.begin() + offset, arg.begin() + offset + actual_len);
+            }, col.data);
+
+            BoolCol new_validity(col.validity.begin() + offset, col.validity.begin() + offset + actual_len);
+
+            Column new_col(col.name, col.type, std::move(new_data));
+            new_col.validity = std::move(new_validity);
+            df.columns.push_back(std::move(new_col));
         }
-        std::cout << "\n" << std::string(row_w + 3 + (columns.size() * col_w), '-') << "\n";
+        return df;
+    }
+
+    [[nodiscard]] DataFrame head(size_t n = 5) const { return slice(0, n); }
+
+    [[nodiscard]] DataFrame tail(size_t n = 5) const {
+        return slice(n >= n_rows ? 0 : n_rows - n, n);
+    }
+
+    [[nodiscard]] DataFrame take(const std::vector<size_t>& indices) const {
+        DataFrame df;
+        df.n_rows = indices.size();
+        for (size_t idx : indices) df.row_names.push_back(row_names.at(idx));
+
+        for (const auto& col : columns) {
+
+            ColumnData new_data = std::visit([&]<typename T>(const T& arg) -> ColumnData {
+                T vec;
+                vec.reserve(indices.size());
+                for (size_t idx : indices) {
+                    vec.push_back(arg.at(idx));
+                }
+                return vec;
+            }, col.data);
+
+            BoolCol new_validity; new_validity.reserve(indices.size());
+            for (size_t idx : indices) new_validity.push_back(col.validity.at(idx));
+
+            Column new_col(col.name, col.type, std::move(new_data));
+            new_col.validity = std::move(new_validity);
+            df.columns.push_back(std::move(new_col));
+        }
+        return df;
+    }
+
+
+    [[nodiscard]] DataFrame filter(const BoolCol& mask) const {
+        if (mask.size() != n_rows) throw std::runtime_error("Mask size must match number of rows");
+        std::vector<size_t> indices;
+        for (size_t i = 0; i < n_rows; ++i) {
+            if (mask[i]) indices.push_back(i);
+        }
+        return take(indices);
+    }
+
+    void print(size_t limit = 10) const {
+        size_t to_show = std::min(limit, n_rows);
+        for (const auto& col : columns) std::cout << std::setw(12) << col.name;
+        std::cout << "\n" << std::string(columns.size() * 12, '-') << "\n";
 
         for (size_t i = 0; i < to_show; ++i) {
-            std::cout << std::left << std::setw(row_w) << row_names[i] << " | ";
-
             for (const auto& col : columns) {
-                std::visit(PrinterVisitor{i, col_w}, col.data);
+                std::visit([&](auto&& vec) {
+                    std::cout << std::setw(12) << vec[i];
+                }, col.data);
             }
-            std::cout << '\n';
+            std::cout << "\n";
         }
     }
 
