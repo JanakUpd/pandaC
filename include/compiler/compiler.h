@@ -64,7 +64,7 @@ public:
     int countIndentation(const std::string& line);
     bool isFileValid(const std::string& filePath);
 public:
-    int run(std::string file);
+    int run(std::string file, bool execute = false, bool log = false);
 };
 
 

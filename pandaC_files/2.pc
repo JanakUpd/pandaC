@@ -1,0 +1,6 @@
+using pandaC
+def int test(int a, int b):
+    return a + b
+def int main():
+    int result = test(5, 10)
+    print(int16(result))

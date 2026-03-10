@@ -1,4 +1,4 @@
-#include "codeconversion.h"
+#include "codeconvertion.h"
 #include "notifier.h"
 #include <iostream>
 
@@ -88,7 +88,8 @@ std::string CodeConvertion::createIndentation(size_t ind) {
     return res;
 }
 
-const Compiler::Keyword* CodeConvertion::findKeyword(const std::string &line, const std::vector<Compiler::Keyword> &keywords) {
+const Compiler::Keyword *CodeConvertion::findKeyword(const std::string &line,
+                                                     const std::vector<Compiler::Keyword> &keywords) {
     for (const auto &item: keywords) {
         if (!item.name.empty() && line.starts_with(item.name)) {
             return &item;
@@ -97,7 +98,8 @@ const Compiler::Keyword* CodeConvertion::findKeyword(const std::string &line, co
     return nullptr;
 }
 
-const Compiler::TypeBinder& CodeConvertion::findTypeBinder(std::string &s, const std::vector<Compiler::TypeBinder> &typeBinders) {
+const Compiler::TypeBinder &CodeConvertion::findTypeBinder(std::string &s,
+                                                           const std::vector<Compiler::TypeBinder> &typeBinders) {
     for (auto &item: typeBinders)
         if (s.size() >= item.pandacName.size() && s.substr(s.size() - item.pandacName.size(), item.pandacName.size()) ==
             item.pandacName)
@@ -105,13 +107,32 @@ const Compiler::TypeBinder& CodeConvertion::findTypeBinder(std::string &s, const
     return typeBinders.back();
 }
 
+// std::string CodeConvertion::convertTypes(const std::string& line) {
+//     std::string result = line;
+//     for (const auto &item: Compiler::typeBinders) {
+//         size_t pos = 0;
+//         while ((pos = result.find(item.pandacName, pos)) != std::string::npos) {
+//             if ((pos == 0 || !std::isalnum(result[pos - 1])) &&
+//                 (pos + item.pandacName.size() >= result.size() || !std::isalnum(result[pos + item.pandacName.size()]))) {
+//                 result.replace(pos, item.pandacName.size(), item.cppName);
+//                 pos += item.cppName.size();
+//             }
+//             else {
+//                 pos += item.pandacName.size();
+//             }
+//         }
+//     }
+//     return result;
+// }
+
 std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compiler::Keyword> &keywords,
-                           std::vector<Compiler::TypeBinder> &typeBinders) {
+                                    std::vector<Compiler::TypeBinder> &typeBinders) {
     std::string finalCppCode;
     std::string line;
     size_t currentIndent = 0;
 
     while (std::getline(in, line)) {
+        //line = convertTypes(line);
         if (line.empty()) continue;
         auto [lineIndent, command] = parseLine(line);
         if (command.empty()) continue;
@@ -137,7 +158,8 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
 static std::set<std::string> cppLibrariesUsed;
 static std::set<std::string> pandaCLibrariesUsed;
 
-std::string CodeConvertion::translateArgs(const std::string &rawArgs, const std::vector<Compiler::TypeBinder> *typeBinders) {
+std::string CodeConvertion::translateArgs(const std::string &rawArgs,
+                                          const std::vector<Compiler::TypeBinder> *typeBinders) {
     if (rawArgs.empty()) return "";
 
     std::string result = "";
@@ -185,7 +207,7 @@ std::string CodeConvertion::translateArgs(const std::string &rawArgs, const std:
 }
 
 std::string CodeConvertion::processDef(std::vector<std::string> *params,
-                                              std::vector<Compiler::TypeBinder> *typeBinders) {
+                                       std::vector<Compiler::TypeBinder> *typeBinders) {
     if (params->empty()) return "";
     for (const auto &p: *params) {
         if (p == "main") return "int main() {\n";
@@ -227,36 +249,41 @@ std::string CodeConvertion::processDef(std::vector<std::string> *params,
 }
 
 std::string CodeConvertion::processUsing(std::vector<std::string> *params,
-                                                std::vector<Compiler::TypeBinder> *typeBinders) {
+                                         std::vector<Compiler::TypeBinder> *typeBinders) {
     if (params->size() == 1)
         pandaCLibrariesUsed.emplace((*params)[0]);
     return "";
 }
 
 std::string CodeConvertion::processReturn(std::vector<std::string> *params,
-                                                 std::vector<Compiler::TypeBinder> *typeBinders) {
-    switch (params->size()) {
-        case 1: return "return " + (*params)[0] + ";\n";
-        default: return "return;\n";
+                                          std::vector<Compiler::TypeBinder> *typeBinders) {
+    if (params->empty()) return "return;\n";
+    std::string res = "return ";
+    for (size_t i = 0; i < params->size(); ++i) {
+        if (i > 0) res += " ";
+        res += (*params)[i];
     }
+    res += ";\n";
+    return res;
 }
 
 std::string CodeConvertion::processIf(std::vector<std::string> *params,
-                                             std::vector<Compiler::TypeBinder> *typeBinders) {
+                                      std::vector<Compiler::TypeBinder> *typeBinders) {
     return "if (" + (*params)[0] + ") {\n";
 }
 
 std::string CodeConvertion::processElse(std::vector<std::string> *params,
-                                               std::vector<Compiler::TypeBinder> *typeBinders) {
+                                        std::vector<Compiler::TypeBinder> *typeBinders) {
     return "else {\n";
 }
 
 std::string CodeConvertion::processFor(std::vector<std::string> *params,
-                                              std::vector<Compiler::TypeBinder> *typeBinders) {
+                                       std::vector<Compiler::TypeBinder> *typeBinders) {
     return "";
 };
+
 std::string CodeConvertion::processPrint(std::vector<std::string> *params,
-                                                std::vector<Compiler::TypeBinder> *typeBinders) {
+                                         std::vector<Compiler::TypeBinder> *typeBinders) {
     cppLibrariesUsed.emplace("iostream");
     switch ((*params).size()) {
         case 1:
