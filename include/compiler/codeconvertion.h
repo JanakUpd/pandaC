@@ -28,6 +28,9 @@ public:
     static std::set<std::string> pandaCLibrariesUsed;
     static std::string translateArgs(const std::string& rawArgs, const std::vector<Compiler::TypeBinder>* typeBinders);
 
+    static int countArgs(const std::string& str);
+    static std::string selectMap(std::vector<std::string>& params, const std::vector<std::string>& maps);
+    static std::string convertCommand(std::vector<std::string>& args, const std::vector<std::string>& maps);
     static std::string processDef(std::vector<std::string>* params, std::vector<Compiler::TypeBinder>* typeBinders);
     static std::string processUsing(std::vector<std::string>* params, std::vector<Compiler::TypeBinder>* typeBinders);
     static std::string processReturn(std::vector<std::string>* params,  std::vector<Compiler::TypeBinder>* typeBinders);

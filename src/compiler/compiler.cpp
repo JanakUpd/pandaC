@@ -49,15 +49,42 @@ int Compiler::run(std::string file, bool execute, bool log) {
     if (log) Notifier::notifyInfo("Compiling file: " + file);
 
     std::vector<Compiler::Keyword> keywords;
-    keywords.emplace_back("if", &CodeConvertion::processIf, (size_t) Compiler::Parameters::Bracketing);
-    keywords.emplace_back("else", &CodeConvertion::processElse);
-    keywords.emplace_back("return", &CodeConvertion::processReturn, (size_t) Compiler::Parameters::Spacing);
-    // keywords.emplace_back("for", &CodeConvertion::processFor);
-    keywords.emplace_back("print", &CodeConvertion::processPrint, (size_t) Compiler::Parameters::Bracketing);
-    keywords.emplace_back("def", &CodeConvertion::processDef,
-                          (size_t) Compiler::Parameters::Spacing | (size_t) Compiler::Parameters::Bracketing);
-    keywords.emplace_back("using", &CodeConvertion::processUsing, (size_t) Compiler::Parameters::Spacing);
-    keywords.emplace_back("", nullptr);
+    std::ifstream keywordsConfig("../config/keywords.conf");
+    if (keywordsConfig.is_open()) {
+        std::string line;
+        while (std::getline(keywordsConfig, line)) {
+            if (line.empty() || line[0] == '#') continue;
+            std::stringstream ss(line);
+            std::string name, funcStr;
+            size_t flags = 0;
+            ss >> name >> funcStr >> flags;
+
+            bool found = false;
+            for (auto &existing : keywords) {
+                if (existing.name == name) {
+                    existing.maps.push_back(funcStr);
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                keywords.emplace_back(name, std::vector<std::string>{funcStr}, flags);
+            }
+        }
+        keywordsConfig.close();
+    }
+    keywords.emplace_back("", std::vector<std::string>{}, 0);
+
+    // keywords.emplace_back("if", &CodeConvertion::processIf, (size_t) Compiler::Parameters::Bracketing);
+    // keywords.emplace_back("else", &CodeConvertion::processElse);
+    // keywords.emplace_back("return", &CodeConvertion::processReturn, (size_t) Compiler::Parameters::Spacing);
+    // // keywords.emplace_back("for", &CodeConvertion::processFor);
+    // keywords.emplace_back("print", &CodeConvertion::processPrint, (size_t) Compiler::Parameters::Bracketing);
+    // keywords.emplace_back("def", &CodeConvertion::processDef,
+    //                       (size_t) Compiler::Parameters::Spacing | (size_t) Compiler::Parameters::Bracketing);
+    // keywords.emplace_back("using", &CodeConvertion::processUsing, (size_t) Compiler::Parameters::Spacing);
+    // keywords.emplace_back("", nullptr);
 
     std::vector<Compiler::TypeBinder> typeBinders;
     typeBinders.emplace_back("int64_t", "int64", Compiler::VarType::Integer,
@@ -87,7 +114,6 @@ int Compiler::run(std::string file, bool execute, bool log) {
     }
     std::string mainCode = CodeConvertion::convert(in, keywords, typeBinders);
 
-    std::filesystem::path dir = file.parent_path();
     std::string pathToOutput = file.substr(0, file.rfind('/')) + "/pandaC_build";
     ensureExists(pathToOutput);
     std::string filenameOnly = file.substr(file.rfind('/'));

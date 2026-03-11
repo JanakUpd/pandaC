@@ -1,4 +1,5 @@
 #include <vector>
+#include <set>
 #ifndef PANDAC_COMPILER_H
 #define PANDAC_COMPILER_H
 
@@ -34,11 +35,11 @@ public:
     };
     using ProcessingFunc = std::string(*)(std::vector<std::string>*, std::vector<TypeBinder>*);
     struct Keyword {
-        ProcessingFunc processing;
+        std::vector<std::string> maps;
         size_t params;
         std::string name;
-        Keyword(std::string name, ProcessingFunc processing, size_t params = 0)
-            : name(std::move(name)), processing(processing), params(params) {}
+        Keyword(std::string name, std::vector<std::string> maps, size_t params = 0)
+            : name(std::move(name)), maps(maps), params(params) {}
     };
     class CodeConvertionClass {
     private:

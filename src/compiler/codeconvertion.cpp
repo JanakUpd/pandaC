@@ -144,7 +144,7 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
             std::string argsStr = command.substr(keyword->name.size());
             std::vector<std::string> params = parseArguments(argsStr, keyword->params);
             finalCppCode += createIndentation(lineIndent);
-            finalCppCode += keyword->processing(&params, &typeBinders);
+            finalCppCode += convertCommand(params, keyword->maps);
         } else {
             finalCppCode += createIndentation(lineIndent) + command + ";\n";
         }
@@ -203,6 +203,30 @@ std::string CodeConvertion::translateArgs(const std::string &rawArgs,
         }
     }
 
+    return result;
+}
+int CodeConvertion::countArgs(const std::string& str) {
+    int count = 0;
+    int shift = 0;
+    while (shift < str.size())
+        if (str.find('[', shift) != std::string::npos) {
+            shift = str.find(']', shift) + 1;
+            ++count;
+        }
+        else
+            break;
+    return count;
+}
+std::string CodeConvertion::selectMap(std::vector<std::string>& params, const std::vector<std::string>& maps) {    int count = params.size();
+    for (auto& item : maps)
+        if (countArgs(item) == count)
+            return item;
+    return "";
+}
+std::string CodeConvertion::convertCommand(std::vector<std::string>& params, const std::vector<std::string>& maps) {
+    std::string result = selectMap(params, maps);
+    for (auto &param: params)
+        result = result.substr(0, result.find('{')) + param + result.substr(result.find('}') + 1);
     return result;
 }
 
