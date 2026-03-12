@@ -3,6 +3,7 @@
 #include <cmath>
 #include <random>
 #include <cstdint>
+#include <stdexcept>
 
 using Vector = std::vector<double>;
 using Matrix = std::vector<Vector>;
@@ -27,3 +28,5 @@ double dot(const Vector& a, const Vector& b) {
     for (std::size_t i = 0; i < a.size(); i++) result += a[i] * b[i];
     return result;
 }
+
+int main() {return 0;}
