@@ -1,0 +1,16 @@
+using pandaC
+
+def int add(int a, int b):
+    return a + b
+
+def fl2 divide(fl2 a, fl2 b):
+    return a / b
+
+def int main():
+    int x = 100
+    int y = 50
+    int sum = add(x, y)
+    print("Sum result: " + sum)
+    print("Division result: " + divide(10.0, 2.3))
+    str greeting = "Hello"
+    print(greeting + " World " + 123)

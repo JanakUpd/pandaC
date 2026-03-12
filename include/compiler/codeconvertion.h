@@ -21,7 +21,8 @@ public:
     static std::string createIndentation(size_t ind);
     static const Compiler::Keyword* findKeyword(const std::string& line, const std::vector<Compiler::Keyword>& keywords);
     static const Compiler::TypeBinder& findTypeBinder(std::string& s, const std::vector<Compiler::TypeBinder>& typeBinders);
-    //static std::string CodeConvertion::convertTypes(const std::string& line);
+    static std::string convertTypes(std::string command, const std::vector<Compiler::TypeBinder> &typeBinders);
+
 public:
     static std::string convert(std::ifstream& in, const std::vector<Compiler::Keyword>& keywords, std::vector<Compiler::TypeBinder>& typeBinders);
     static std::set<std::string> cppLibrariesUsed;

@@ -1,9 +1,82 @@
 #include "codeconvertion.h"
-#include "notifier.h"
 #include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <map>
+#include <set>
 
 std::set<std::string> CodeConvertion::cppLibrariesUsed;
 std::set<std::string> CodeConvertion::pandaCLibrariesUsed;
+
+bool matchPattern(const std::string &line, const std::string &pattern, std::vector<std::string> &extractedParams) {
+    size_t l = 0;
+    size_t p = 0;
+    extractedParams.clear();
+
+    while (p < pattern.length()) {
+        if (pattern[p] == '[') {
+            size_t close = pattern.find(']', p);
+            if (close == std::string::npos) return false;
+
+            std::string key = pattern.substr(p + 1, close - p - 1);
+            int index = -1;
+            try {
+                if (isdigit(key[0])) index = std::stoi(key);
+            } catch (...) { index = -1; }
+
+            p = close + 1;
+
+            char delimiter = (p < pattern.length()) ? pattern[p] : '\0';
+
+            size_t startL = l;
+            int bracketDepth = 0;
+            bool inQuote = false;
+            char quoteChar = 0;
+
+            while (l < line.length()) {
+                char c = line[l];
+                if (inQuote) {
+                    if (c == '\\') l++;
+                    else if (c == quoteChar) inQuote = false;
+                }
+                else {
+                    if (bracketDepth == 0 && (c == delimiter || (c == ',' && delimiter != ',')))
+                        break;
+                    if (c == '(' || c == '{' || c == '[')
+                        bracketDepth++;
+                    else if (c == ')' || c == '}' || c == ']') {
+                        if (bracketDepth > 0)
+                            bracketDepth--;
+                    }
+                    else if (c == '"' || c == '\'') {
+                        inQuote = true;
+                        quoteChar = c;
+                    }
+                }
+                l++;
+            }
+
+            std::string captured = line.substr(startL, l - startL);
+
+            if (delimiter != '\0')
+                if (!(l < line.length() && line[l] == delimiter))
+                    return false;
+
+            if (index >= 0) {
+                if (extractedParams.size() <= index) extractedParams.resize(index + 1);
+                extractedParams[index] = captured;
+            }
+        }
+        else {
+            if (l >= line.length() || line[l] != pattern[p])
+                return false;
+            l++;
+            p++;
+        }
+    }
+    return l == line.length();
+}
 
 std::vector<std::string> CodeConvertion::parseArguments(const std::string &argsStr, size_t paramFlags) {
     std::vector<std::string> params;
@@ -11,46 +84,18 @@ std::vector<std::string> CodeConvertion::parseArguments(const std::string &argsS
     bool useBracketing = (paramFlags & static_cast<size_t>(Compiler::Parameters::Bracketing)) != 0;
 
     std::string buffer;
-    size_t depth = 0;
     bool inBrackets = false;
-
     for (char c: argsStr) {
-        if (useBracketing && c == '(') {
-            if (depth == 0) {
-                if (useSpacing && !buffer.empty()) {
-                    params.push_back(buffer);
-                    buffer.clear();
-                }
-                inBrackets = true;
-            } else {
-                buffer += c;
-            }
-            ++depth;
-        } else if (useBracketing && c == ')') {
-            depth--;
-            if (depth == 0) {
-                params.push_back(buffer);
-                buffer.clear();
-                inBrackets = false;
-            } else {
-                buffer += c;
-            }
-        } else if (inBrackets) {
+        if (c == ',' && !inBrackets) {
+            params.push_back(buffer);
+            buffer.clear();
+        } else {
+            if (c == '(') inBrackets = true;
+            if (c == ')') inBrackets = false;
             buffer += c;
-        } else if (useSpacing) {
-            if (std::isspace(c) || c == ':') {
-                if (!buffer.empty()) {
-                    params.push_back(buffer);
-                    buffer.clear();
-                }
-            } else {
-                buffer += c;
-            }
         }
     }
-    if (!buffer.empty())
-        params.push_back(buffer);
-
+    if (!buffer.empty()) params.push_back(buffer);
     return params;
 }
 
@@ -67,9 +112,7 @@ std::pair<size_t, std::string> CodeConvertion::parseLine(const std::string &line
         } else break;
     }
     std::string trimmed = line.substr(i);
-    while (!trimmed.empty() && std::isspace(trimmed.back())) {
-        trimmed.pop_back();
-    }
+    while (!trimmed.empty() && std::isspace(trimmed.back())) trimmed.pop_back();
     return {indentCount, trimmed};
 }
 
@@ -107,23 +150,26 @@ const Compiler::TypeBinder &CodeConvertion::findTypeBinder(std::string &s,
     return typeBinders.back();
 }
 
-// std::string CodeConvertion::convertTypes(const std::string& line) {
-//     std::string result = line;
-//     for (const auto &item: Compiler::typeBinders) {
-//         size_t pos = 0;
-//         while ((pos = result.find(item.pandacName, pos)) != std::string::npos) {
-//             if ((pos == 0 || !std::isalnum(result[pos - 1])) &&
-//                 (pos + item.pandacName.size() >= result.size() || !std::isalnum(result[pos + item.pandacName.size()]))) {
-//                 result.replace(pos, item.pandacName.size(), item.cppName);
-//                 pos += item.cppName.size();
-//             }
-//             else {
-//                 pos += item.pandacName.size();
-//             }
-//         }
-//     }
-//     return result;
-// }
+std::string CodeConvertion::convertTypes(std::string command, const std::vector<Compiler::TypeBinder> &typeBinders) {
+    for (const auto &item: typeBinders) {
+        if (item.pandacName.empty()) continue;
+        size_t pos = 0;
+        while ((pos = command.find(item.pandacName, pos)) != std::string::npos) {
+            bool leftOk = (pos == 0 || (!std::isalnum(command[pos - 1]) && command[pos - 1] != '_'));
+            bool rightOk = (pos + item.pandacName.size() >= command.size() ||
+                            (!std::isalnum(command[pos + item.pandacName.size()]) && command[
+                                 pos + item.pandacName.size()] != '_'));
+
+            if (leftOk && rightOk) {
+                command.replace(pos, item.pandacName.size(), item.cppName);
+                pos += item.cppName.size();
+            } else {
+                pos += item.pandacName.size();
+            }
+        }
+    }
+    return command;
+}
 
 std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compiler::Keyword> &keywords,
                                     std::vector<Compiler::TypeBinder> &typeBinders) {
@@ -132,23 +178,95 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
     size_t currentIndent = 0;
 
     while (std::getline(in, line)) {
-        //line = convertTypes(line);
         if (line.empty()) continue;
         auto [lineIndent, command] = parseLine(line);
         if (command.empty()) continue;
+
         if (lineIndent < currentIndent)
             finalCppCode += adjustBraces(currentIndent, lineIndent);
 
-        auto *keyword = findKeyword(command, keywords);
-        if (keyword) {
-            std::string argsStr = command.substr(keyword->name.size());
-            std::vector<std::string> params = parseArguments(argsStr, keyword->params);
-            finalCppCode += createIndentation(lineIndent);
-            finalCppCode += convertCommand(params, keyword->maps);
-        } else {
-            finalCppCode += createIndentation(lineIndent) + command + ";\n";
-        }
+        if (command.starts_with("def ")) {
+            std::string sub = command.substr(4);
+            std::vector<std::string> parts;
+            std::stringstream ss(sub);
+            std::string buf;
+            while (getline(ss, buf, '(')) {
+                parts.push_back(buf);
+                break;
+            }
+            std::vector<std::string> defParams = parseArguments(sub, 0);
+            std::vector<std::string> tokens;
+            std::string temp;
+            for (char c: sub) {
+                if (c == '(') break;
+                if (c == ' ') {
+                    if (!temp.empty()) tokens.push_back(temp);
+                    temp.clear();
+                } else temp += c;
+            }
+            if (!temp.empty()) tokens.push_back(temp);
+            size_t startArgs = sub.find('(');
+            size_t endArgs = sub.rfind(')');
+            if (startArgs != std::string::npos && endArgs != std::string::npos) {
+                tokens.push_back(sub.substr(startArgs + 1, endArgs - startArgs - 1));
+            }
 
+            finalCppCode += createIndentation(lineIndent);
+            finalCppCode += processDef(&tokens, &typeBinders);
+        }
+        else if (command.starts_with("using ")) {
+            std::vector<std::string> params{command.substr(6)};
+            processUsing(&params, &typeBinders);
+        }
+        else {
+            bool matchedKeyword = false;
+            auto *keyword = findKeyword(command, keywords);
+            if (keyword) {
+                for (const auto &mapEntry: keyword->maps) {
+                    size_t sep = mapEntry.find("@@@");
+                    if (sep == std::string::npos) continue;
+
+                    std::string pattern = mapEntry.substr(0, sep);
+                    std::string codeTemplate = mapEntry.substr(sep + 3);
+                    std::vector<std::string> capturedArgs;
+
+                    if (matchPattern(command, pattern, capturedArgs)) {
+                        std::string result = codeTemplate;
+                        for (size_t i = 0; i < capturedArgs.size(); ++i) {
+                            std::string pl = "[" + std::to_string(i) + "]";
+                            size_t pos = 0;
+                            while ((pos = result.find(pl, pos)) != std::string::npos) {
+                                result.replace(pos, pl.length(), capturedArgs[i]);
+                                pos += capturedArgs[i].length();
+                            }
+                        }
+                        finalCppCode += createIndentation(lineIndent) + result + "\n";
+                        matchedKeyword = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!matchedKeyword) {
+                command = convertTypes(command, typeBinders);
+                if (command.starts_with("if ")) {
+                    std::string cond = command.substr(3);
+                    std::vector<std::string> p{cond};
+                    finalCppCode += createIndentation(lineIndent) + processIf(&p, &typeBinders);
+                }
+                else if (command.starts_with("else")) {
+                    std::vector<std::string> p;
+                    finalCppCode += createIndentation(lineIndent) + processElse(&p, &typeBinders);
+                }
+                else if (command.starts_with("return")) {
+                    std::string val = (command.length() > 6) ? command.substr(7) : "";
+                    std::vector<std::string> p{val};
+                    finalCppCode += createIndentation(lineIndent) + processReturn(&p, &typeBinders);
+                }
+                else
+                    finalCppCode += createIndentation(lineIndent) + command + ";\n";
+            }
+        }
         currentIndent = lineIndent;
     }
     finalCppCode += adjustBraces(currentIndent, 0);
@@ -161,72 +279,88 @@ static std::set<std::string> pandaCLibrariesUsed;
 std::string CodeConvertion::translateArgs(const std::string &rawArgs,
                                           const std::vector<Compiler::TypeBinder> *typeBinders) {
     if (rawArgs.empty()) return "";
-
-    std::string result = "";
-    std::string currentArg = "";
-
-    std::string argsToParse = rawArgs + ",";
-    bool first = true;
-
-    for (char c: argsToParse) {
-        if (c == ',') {
-            size_t start = currentArg.find_first_not_of(" \t");
-            if (start != std::string::npos) {
-                currentArg = currentArg.substr(start);
-                size_t spacePos = currentArg.find_first_of(" \t");
-                if (spacePos != std::string::npos) {
-                    std::string pandaType = currentArg.substr(0, spacePos);
-
-                    size_t namePos = currentArg.find_first_not_of(" \t", spacePos);
-                    std::string varName = (namePos != std::string::npos) ? currentArg.substr(namePos) : "";
-
-                    std::string cppType = pandaType;
-                    for (const auto &tb: *typeBinders) {
-                        if (tb.pandacName == pandaType) {
-                            cppType = tb.cppName;
-                            break;
-                        }
-                    }
-
-                    if (!first) result += ", ";
-                    result += cppType + " " + varName;
-                    first = false;
-                } else {
-                    if (!first) result += ", ";
-                    result += currentArg;
-                    first = false;
-                }
-            }
+    std::string result;
+    std::string currentArg;
+    std::vector<std::string> args;
+    int depth = 0;
+    for (char c: rawArgs) {
+        if (c == ',' && depth == 0) {
+            args.push_back(currentArg);
             currentArg.clear();
         } else {
+            if (c == '<' || c == '(') depth++;
+            if (c == '>' || c == ')') depth--;
             currentArg += c;
         }
     }
+    args.push_back(currentArg);
 
+    for (size_t i = 0; i < args.size(); ++i) {
+        std::string s = args[i];
+        size_t first = s.find_first_not_of(" \t");
+        if (first == std::string::npos) continue;
+        s = s.substr(first);
+        size_t last = s.find_last_not_of(" \t");
+        if (last != std::string::npos) s = s.substr(0, last + 1);
+
+        if (i > 0) result += ", ";
+
+        size_t space = s.find(' ');
+        if (space != std::string::npos) {
+            std::string typePart = s.substr(0, space);
+            std::string namePart = s.substr(space + 1);
+
+            bool foundType = false;
+            for (const auto &tb: *typeBinders) {
+                if (tb.pandacName == typePart) {
+                    result += tb.cppName + " " + namePart;
+                    foundType = true;
+                    break;
+                }
+            }
+            if (!foundType) result += s;
+        } else {
+            result += s;
+        }
+    }
     return result;
 }
-int CodeConvertion::countArgs(const std::string& str) {
+
+int CodeConvertion::countArgs(const std::string &str) {
     int count = 0;
     int shift = 0;
     while (shift < str.size())
         if (str.find('[', shift) != std::string::npos) {
             shift = str.find(']', shift) + 1;
             ++count;
-        }
-        else
+        } else
             break;
     return count;
 }
-std::string CodeConvertion::selectMap(std::vector<std::string>& params, const std::vector<std::string>& maps) {    int count = params.size();
-    for (auto& item : maps)
+
+std::string CodeConvertion::selectMap(std::vector<std::string> &params, const std::vector<std::string> &maps) {
+    int count = params.size();
+    for (auto &item: maps)
         if (countArgs(item) == count)
             return item;
     return "";
 }
-std::string CodeConvertion::convertCommand(std::vector<std::string>& params, const std::vector<std::string>& maps) {
+
+std::string CodeConvertion::convertCommand(std::vector<std::string> &params, const std::vector<std::string> &maps) {
     std::string result = selectMap(params, maps);
-    for (auto &param: params)
-        result = result.substr(0, result.find('{')) + param + result.substr(result.find('}') + 1);
+    if (result.empty()) return "";
+
+    for (size_t i = 0; i < params.size(); ++i) {
+        std::string placeholder = "[" + std::to_string(i) + "]";
+        size_t pos = 0;
+        while ((pos = result.find(placeholder, pos)) != std::string::npos) {
+            result.replace(pos, placeholder.length(), params[i]);
+            pos += params[i].length();
+        }
+    }
+    if (!result.empty() && result.back() != '\n') {
+        result += "\n";
+    }
     return result;
 }
 
@@ -289,33 +423,4 @@ std::string CodeConvertion::processReturn(std::vector<std::string> *params,
     }
     res += ";\n";
     return res;
-}
-
-std::string CodeConvertion::processIf(std::vector<std::string> *params,
-                                      std::vector<Compiler::TypeBinder> *typeBinders) {
-    return "if (" + (*params)[0] + ") {\n";
-}
-
-std::string CodeConvertion::processElse(std::vector<std::string> *params,
-                                        std::vector<Compiler::TypeBinder> *typeBinders) {
-    return "else {\n";
-}
-
-std::string CodeConvertion::processFor(std::vector<std::string> *params,
-                                       std::vector<Compiler::TypeBinder> *typeBinders) {
-    return "";
-};
-
-std::string CodeConvertion::processPrint(std::vector<std::string> *params,
-                                         std::vector<Compiler::TypeBinder> *typeBinders) {
-    cppLibrariesUsed.emplace("iostream");
-    switch ((*params).size()) {
-        case 1:
-            return "std::cout << " + (*params)[0] + " << std::endl;\n";
-        case 2:
-            return "std::cout << " + (*params)[0] + " << " + (*params)[1] + ";\n";
-        default:
-            Notifier::notifyError(ERROR_TYPE::SYNTAX_ERROR);
-            return "";
-    }
 }

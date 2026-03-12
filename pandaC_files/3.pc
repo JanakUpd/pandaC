@@ -1,0 +1,10 @@
+using pandaC
+
+def int main():
+    fl2 pi = 3.14159
+    int radius = 5
+    print("Value of PI: " + pi)
+    fl2 area = pi * radius * radius
+    print("Area of circle with radius " + radius + " is " + area)
+    int temp = -10
+    print("Temperature: " + temp + "C")
