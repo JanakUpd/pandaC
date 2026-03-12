@@ -133,4 +133,37 @@ bool all_same_class(const Vector& y) {
     return true;
 }
 
+
+class IModel {
+public:
+    virtual ~IModel() = default;
+};
+
+class ISupervisedModel : public IModel {
+public:
+    virtual void fit(const Matrix& X, const Vector& y) = 0;
+    virtual double predict(const Vector& x) const = 0;
+    virtual ~ISupervisedModel() = default;
+};
+
+class IUnsupervisedModel : public IModel {
+public:
+    virtual void fit(const Matrix& X) = 0;
+    virtual ~IUnsupervisedModel() = default;
+};
+
+class ITransformer : public IModel {
+public:
+    virtual void fit(const Matrix& X) = 0;
+    virtual Matrix transform(const Matrix& X) const = 0;
+    virtual ~ITransformer() = default;
+};
+
+class ILoss {
+public:
+    virtual ~ILoss() = default;
+    virtual double value(const Vector& y_true, const Vector& y_pred) const = 0;
+    virtual Vector gradient(const Vector& y_true, const Vector& y_pred) const = 0;
+};
+
 int main() {return 0;}
