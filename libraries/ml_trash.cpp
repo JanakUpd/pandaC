@@ -353,4 +353,23 @@ public:
     double bias() const {return params_.back();}
 };
 
+class LinearRegression final : public BaseGradientModel {
+protected:
+    double activate(double z) const override {return z;}
+    double activation_derivative_from_output(double) const override {return 1.0;}
+public:
+    LinearRegression(std::size_t feature_count, std::unique_ptr<ILoss> loss,std::unique_ptr<IOptimizer> optimizer): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
+};
+
+class LogisticRegression final : public BaseGradientModel {
+protected:
+    double activate(double z) const override {return sigmoid(z);}
+
+    double activation_derivative_from_output(double y_pred) const override {return y_pred * (1.0 - y_pred);}
+
+public:
+    LogisticRegression(std::size_t feature_count,std::unique_ptr<ILoss> loss,std::unique_ptr<IOptimizer> optimizer): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
+    int predict_class(const Vector& x, double threshold = 0.5) const {return predict(x) >= threshold ? 1 : 0;}
+};
+
 int main() {return 0;}
