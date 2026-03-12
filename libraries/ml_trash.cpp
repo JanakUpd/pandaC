@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <unordered_map>
+#include <algorithm>
 
 using Vector = std::vector<double>;
 using Matrix = std::vector<Vector>;
@@ -166,12 +167,19 @@ public:
     virtual Vector gradient(const Vector& y_true, const Vector& y_pred) const = 0;
 };
 
+class IOptimizer {
+public:
+    virtual ~IOptimizer() = default;
+    virtual void initialize(uint64_t param_count) = 0;
+    virtual void step(Vector& params, const Vector& grads) = 0;
+};
+
 class MeanSquaredError final : public ILoss {
 public:
     double value(const Vector& y_true, const Vector& y_pred) const override {
         if (y_true.size() != y_pred.size()) throw std::invalid_argument("MSE sizes unequal");
         double loss = 0.0;
-        for (std::size_t i = 0; i < y_true.size(); i++) {
+        for (uint64_t i = 0; i < y_true.size(); i++) {
             const double diff = y_pred[i] - y_true[i];
             loss += diff * diff;
         }
@@ -180,10 +188,74 @@ public:
     Vector gradient(const Vector& y_true, const Vector& y_pred) const override {
         if (y_true.size() != y_pred.size()) throw std::invalid_argument("MSE gradient: sizes unequal");
         Vector grad(y_true.size(), 0.0);
-        for (std::size_t i = 0; i < y_true.size(); i++) grad[i] = 2.0 * (y_pred[i] - y_true[i]);
+        for (uint64_t i = 0; i < y_true.size(); i++) grad[i] = 2.0 * (y_pred[i] - y_true[i]);
         return grad;
     }
 };
 
+class BinaryCrossEntropy final : public ILoss {
+public:
+    double value(const Vector& y_true, const Vector& y_pred) const override {
+        if (y_true.size() != y_pred.size()) throw std::invalid_argument("BCE sizes unequal");
+        constexpr double eps = 1e-15;
+        double loss = 0.0;
+        for (uint64_t i = 0; i < y_true.size(); i++) {
+            const double p = std::clamp(y_pred[i], eps, 1.0 - eps);
+            loss += -y_true[i] * std::log(p) - (1.0 - y_true[i]) * std::log(1.0 - p);
+        }
+        return loss / static_cast<double>(y_true.size());
+    }
+    Vector gradient(const Vector& y_true, const Vector& y_pred) const override {
+        if (y_true.size() != y_pred.size()) throw std::invalid_argument("BCE gradient: sizes unequal");
+        constexpr double eps = 1e-15;
+        Vector grad(y_true.size(), 0.0);
+        for (uint64_t i = 0; i < y_true.size(); ++i) {
+            const double p = std::clamp(y_pred[i], eps, 1.0 - eps);
+            grad[i] = -(y_true[i] / p) + (1.0 - y_true[i]) / (1.0 - p);
+        }
+        return grad;
+    }
+};
+
+class SGD final : public IOptimizer {
+private:
+    double learning_rate_;
+public:
+    explicit SGD(double learning_rate) : learning_rate_(learning_rate) {}
+    void initialize(uint64_t) override {}
+    void step(Vector& params, const Vector& grads) override {
+        if (params.size() != grads.size()) throw std::invalid_argument("SGD: params/grads sizes unequal");
+        for (uint64_t i = 0; i < params.size(); i++) params[i] -= learning_rate_ * grads[i];
+    }
+};
+
+class Adam final : public IOptimizer {
+private:
+    double learning_rate_;
+    double beta1_;
+    double beta2_;
+    double eps_;
+    Vector m_;
+    Vector v_;
+    std::size_t t_ = 0;
+public:
+    Adam(double learning_rate = 0.001, double beta1 = 0.9, double beta2 = 0.999, double eps = 1e-8): learning_rate_(learning_rate), beta1_(beta1), beta2_(beta2), eps_(eps) {}
+    void initialize(std::size_t param_count) override {
+        m_.assign(param_count, 0.0);
+        v_.assign(param_count, 0.0);
+        t_ = 0;
+    }
+    void step(Vector& params, const Vector& grads) override {
+        if (params.size() != grads.size()) throw std::invalid_argument("Adam: params/grads sizes unequal");
+        ++t_;
+        for (std::size_t i = 0; i < params.size(); ++i) {
+            m_[i] = beta1_ * m_[i] + (1.0 - beta1_) * grads[i];
+            v_[i] = beta2_ * v_[i] + (1.0 - beta2_) * grads[i] * grads[i];
+            const double m_hat = m_[i] / (1.0 - std::pow(beta1_, static_cast<double>(t_)));
+            const double v_hat = v_[i] / (1.0 - std::pow(beta2_, static_cast<double>(t_)));
+            params[i] -= learning_rate_ * m_hat / (std::sqrt(v_hat) + eps_);
+        }
+    }
+};
 
 int main() {return 0;}
