@@ -166,4 +166,24 @@ public:
     virtual Vector gradient(const Vector& y_true, const Vector& y_pred) const = 0;
 };
 
+class MeanSquaredError final : public ILoss {
+public:
+    double value(const Vector& y_true, const Vector& y_pred) const override {
+        if (y_true.size() != y_pred.size()) throw std::invalid_argument("MSE sizes unequal");
+        double loss = 0.0;
+        for (std::size_t i = 0; i < y_true.size(); i++) {
+            const double diff = y_pred[i] - y_true[i];
+            loss += diff * diff;
+        }
+        return loss / static_cast<double>(y_true.size());
+    }
+    Vector gradient(const Vector& y_true, const Vector& y_pred) const override {
+        if (y_true.size() != y_pred.size()) throw std::invalid_argument("MSE gradient: sizes unequal");
+        Vector grad(y_true.size(), 0.0);
+        for (std::size_t i = 0; i < y_true.size(); i++) grad[i] = 2.0 * (y_pred[i] - y_true[i]);
+        return grad;
+    }
+};
+
+
 int main() {return 0;}
