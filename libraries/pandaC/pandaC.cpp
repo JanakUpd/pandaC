@@ -18,7 +18,7 @@ template<typename T>
 struct Array {
     std::vector<Var<T>> data;
 
-    size_t len() const { return data.size(); }
+    size_t len() const { return Var(data.size()); }
 
     const T& operator [](size_t ind) const { return data[ind].value; }
     Var<T>& operator [](size_t ind) { return data[ind]; }

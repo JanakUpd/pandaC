@@ -3,6 +3,7 @@
 #include <iterator>
 #include <list>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -45,6 +46,12 @@ struct Var {
     template<typename U> requires (!std::is_same_v<std::decay_t<U>, T> && std::convertible_to<U, T>)
     Var(const U &v) : value(v) {}
 
+    explicit Var(const Var<std::string> &v) requires (!std::is_same_v<T, std::string>) {
+        std::stringstream ss(v.value);
+        if (!(ss >> value))
+            throw std::runtime_error("failed to parse '" + v.value + "' to target type.");
+    }
+
     operator T &() { return value; }
     operator const T &() const { return value; }
 
@@ -59,6 +66,7 @@ struct Var {
     Array<std::string> split(const Var<std::string>& delimiter) const
         requires std::is_same_v<T, std::string>;
 };
+
 
 template<typename T>
 struct List {

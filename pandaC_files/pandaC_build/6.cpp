@@ -164,10 +164,10 @@ Var<std::string> input(Var<std::string> prompt = "") {
 }
 //END OF BLOCK: pandaC
 
-Var<int32_t> test(Var<int32_t> a, Var<int32_t> b) {
-    return a + b;
-}
 int main() {
-    Var<int32_t> result = test(5, 10);
-    std::cout<<result + "s"<<' ';
+    Var<std::string> name = input("Enter your name: ");
+    std::cout<<"Hello, " + name<<'\n';
+    std::cout<<"Enter a number:"<<' ';
+    Var<int32_t> num = Var<int32_t>(input());
+    std::cout<<"You entered: " + num<<'\n';
 }

@@ -4,7 +4,6 @@
 #include <vector>
 #include <string>
 #include <set>
-#include <list>
 #include <filesystem>
 #include <chrono>
 
@@ -149,7 +148,6 @@ int Compiler::run(std::string file, bool execute, bool log) {
     std::string pandaClibraries = "";
 
     for (auto &item: CodeConvertion::pandaCLibrariesUsed) {
-        // 1. Resolve Paths
         std::filesystem::path libFolder = "../libraries/" + item;
         std::filesystem::path cppPath = libFolder / (item + ".cpp");
         std::filesystem::path confPath = libFolder / (item + ".conf");
@@ -158,7 +156,6 @@ int Compiler::run(std::string file, bool execute, bool log) {
             cppPath = "../libraries/" + item + ".cpp";
         }
 
-        // 2. Read Source Code
         pandaClibraries += "//START OF BLOCK: " + item + "\n\n";
         std::ifstream inLib(cppPath);
         if (inLib.is_open()) {
@@ -171,7 +168,6 @@ int Compiler::run(std::string file, bool execute, bool log) {
         }
         pandaClibraries += "//END OF BLOCK: " + item + "\n\n";
 
-        // 3. Read Config (extract CppLibraries)
         if (std::filesystem::exists(confPath)) {
             std::ifstream inConf(confPath);
             std::string confLine;
@@ -187,9 +183,8 @@ int Compiler::run(std::string file, bool execute, bool log) {
                         continue;
                     }
 
-                    // ROBUST PARSING logic
                     size_t first = confLine.find_first_not_of(" \t\r\n");
-                    if (first == std::string::npos) continue; // Skip empty lines or pure whitespace
+                    if (first == std::string::npos) continue;
                     size_t last = confLine.find_last_not_of(" \t\r\n");
                     std::string libName = confLine.substr(first, (last - first + 1));
 
@@ -202,7 +197,6 @@ int Compiler::run(std::string file, bool execute, bool log) {
         }
     }
 
-    // --- Output Generation ---
     std::string pathToOutput = file.substr(0, file.rfind('/')) + "/pandaC_build";
     ensureExists(pathToOutput);
     std::string filenameOnly = file.substr(file.rfind('/'));

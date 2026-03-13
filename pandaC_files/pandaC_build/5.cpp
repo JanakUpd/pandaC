@@ -164,10 +164,19 @@ Var<std::string> input(Var<std::string> prompt = "") {
 }
 //END OF BLOCK: pandaC
 
-Var<int32_t> test(Var<int32_t> a, Var<int32_t> b) {
-    return a + b;
-}
 int main() {
-    Var<int32_t> result = test(5, 10);
-    std::cout<<result + "s"<<' ';
+    for (Var<int32_t> i = 0; i < 10; ++i) {
+        std::cout<<"Count: " + i<<'\n';
+    }
+    for (Var<int32_t> j = 5; j <  11; ++j) {
+        std::cout<<"Range: " + j<<'\n';
+    }
+    for (Var<int32_t> k = 1; k <  10; k +=  2) {
+        std::cout<<"Odd: " + k<<'\n';
+    }
+    Var<int32_t> x = 0;
+    while (x < 3) {
+        std::cout<<"While: " + x<<'\n';
+        x = x + 1;
+    }
 }
