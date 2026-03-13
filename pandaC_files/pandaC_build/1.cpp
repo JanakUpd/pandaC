@@ -63,7 +63,11 @@ struct Array {
     Var<size_t> len() const { return Var<size_t>(data.size()); }
 
     const T& operator [](size_t ind) const { return data[ind]; }
-    T& operator [](size_t ind) { return data[ind]; }
+    T& operator [](size_t ind) { return Var(data[ind]); }
+    auto begin() { return data.begin(); }
+    auto end() { return data.end(); }
+    auto begin() const { return data.begin(); }
+    auto end() const { return data.end(); }
     ~Array() { data.clear(); }
 };
 
@@ -170,6 +174,20 @@ Var<std::string> input(Var<std::string> prompt = "") {
     std::string s;
     std::getline(std::cin, s);
     return Var<std::string>(s);
+}
+
+
+std::vector<Var<size_t>> range(long long start, long long end, long long step = 1) {
+    std::vector<Var<size_t>> result;
+    result.reserve((end - start) / step);
+    for (size_t i = start; i < end; i += step){
+        result.push_back(i);
+    }
+    return result;
+}
+
+std::vector<Var<size_t>> range(long long end) {
+    return range(0, end, 1);
 }
 //END OF BLOCK: pandaC
 

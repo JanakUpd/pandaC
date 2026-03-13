@@ -147,7 +147,17 @@ int Compiler::run(std::string file, bool execute, bool log) {
 
     std::string pandaClibraries = "";
 
-    for (auto &item: CodeConvertion::pandaCLibrariesUsed) {
+    std::vector<std::string> sortedLibs;
+    if (CodeConvertion::pandaCLibrariesUsed.count("pandaC")) {
+        sortedLibs.push_back("pandaC");
+    }
+    for (const auto &item : CodeConvertion::pandaCLibrariesUsed) {
+        if (item != "pandaC") {
+            sortedLibs.push_back(item);
+        }
+    }
+
+    for (auto &item: sortedLibs) {
         std::filesystem::path libFolder = "../libraries/" + item;
         std::filesystem::path cppPath = libFolder / (item + ".cpp");
         std::filesystem::path confPath = libFolder / (item + ".conf");

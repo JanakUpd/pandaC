@@ -9,6 +9,7 @@
 #include <vector>
 //START OF BLOCK: pandaC
 
+#include <vector>
 template<typename T> struct Var;
 
 template<typename T>
@@ -24,18 +25,6 @@ std::string to_str(const T &val) {
 
 template<typename T> struct Array;
 template<typename T> struct List;
-
-template<typename T>
-struct Array {
-    std::vector<Var<T>> data;
-
-    size_t len() const { return data.size(); }
-
-    const T& operator [](size_t ind) const { return data[ind].value; }
-    Var<T>& operator [](size_t ind) { return data[ind]; }
-
-    ~Array() { data.clear(); }
-};
 
 template<typename T>
 struct Var {
@@ -67,6 +56,20 @@ struct Var {
         requires std::is_same_v<T, std::string>;
 };
 
+template<typename T>
+struct Array {
+    std::vector<T> data;
+
+    Var<size_t> len() const { return Var<size_t>(data.size()); }
+
+    const T& operator [](size_t ind) const { return data[ind]; }
+    T& operator [](size_t ind) { return Var(data[ind]); }
+    auto begin() { return data.begin(); }
+    auto end() { return data.end(); }
+    auto begin() const { return data.begin(); }
+    auto end() const { return data.end(); }
+    ~Array() { data.clear(); }
+};
 
 template<typename T>
 struct List {
@@ -82,6 +85,16 @@ struct List {
     ~List() { data.clear(); }
 };
 
+template<typename T>
+struct Matr
+{
+    std::vector<std::vector<T>> data;
+
+    Var<size_t> rows() const { return Var<size_t>(data.size()); }
+    Var<size_t> cols() const { return data.empty() ? Var<size_t>(0) : Var<size_t>(data[0].size()); }
+
+    const Var<T>& operator()(size_t row, size_t col) const { return data[row][col]; }
+};
 template<typename T>
 Var<std::string> Var<T>::substr(const Var<int>& a, const Var<int>& b) const requires std::is_same_v<T, std::string> {
     Var<std::string> result = "";
@@ -161,6 +174,20 @@ Var<std::string> input(Var<std::string> prompt = "") {
     std::string s;
     std::getline(std::cin, s);
     return Var<std::string>(s);
+}
+
+
+std::vector<Var<size_t>> range(long long start, long long end, long long step = 1) {
+    std::vector<Var<size_t>> result;
+    result.reserve((end - start) / step);
+    for (size_t i = start; i < end; i += step){
+        result.push_back(i);
+    }
+    return result;
+}
+
+std::vector<Var<size_t>> range(long long end) {
+    return range(0, end, 1);
 }
 //END OF BLOCK: pandaC
 

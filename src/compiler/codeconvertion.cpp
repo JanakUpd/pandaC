@@ -472,26 +472,6 @@ std::string CodeConvertion::processFor(std::vector<std::string> *params, std::ve
         while (!varName.empty() && std::isspace(varName.back())) varName.pop_back();
         while (!varName.empty() && std::isspace(varName.front())) varName.erase(0, 1);
         while (!iterator.empty() && std::isspace(iterator.front())) iterator.erase(0, 1);
-
-        if (iterator.starts_with("range(") && iterator.ends_with(")")) {
-            std::string content = iterator.substr(6, iterator.length() - 7);
-
-            std::vector<std::string> args;
-            std::stringstream ss(content);
-            std::string arg;
-            while (std::getline(ss, arg, ',')) {
-                args.push_back(arg);
-            }
-
-            if (args.size() == 1)
-                return "for (" + intType + " " + varName + " = 0; " + varName + " < " + args[0] + "; ++" + varName + ") {\n";
-            if (args.size() == 2)
-                return "for (" + intType + " " + varName + " = " + args[0] + "; " + varName + " < " + args[1] + "; ++" + varName + ") {\n";
-            if (args.size() == 3)
-                return "for (" + intType + " " + varName + " = " + args[0] + "; " + varName + " < " + args[1] + "; " + varName + " += " + args[2] + ") {\n";
-        }
-
-        return "for (auto " + varName + " : " + iterator + ") {\n";
     }
 
     return "for (" + line + ") {\n";
