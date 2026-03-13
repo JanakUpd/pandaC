@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <memory>
 #include <limits>
+#include <numeric>
 
 using Vector = std::vector<double>;
 using Matrix = std::vector<Vector>;
@@ -586,5 +587,7 @@ public:
 
     const Matrix& centroids() const {return centroids_;}
 };
+
+
 
 int main() {return 0;}
