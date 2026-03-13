@@ -35,10 +35,10 @@ public:
     static std::string processDef(std::vector<std::string>* params, std::vector<Compiler::TypeBinder>* typeBinders);
     static std::string processUsing(std::vector<std::string>* params, std::vector<Compiler::TypeBinder>* typeBinders);
     static std::string processReturn(std::vector<std::string>* params,  std::vector<Compiler::TypeBinder>* typeBinders);
-    static std::string processIf(std::vector<std::string>* params, std::vector<Compiler::TypeBinder>* typeBinders);
-    static std::string processElse(std::vector<std::string>* params, std::vector<Compiler::TypeBinder>* typeBinders);
-    static std::string processFor(std::vector<std::string>* params, std::vector<Compiler::TypeBinder>* typeBinders);
-    static std::string processPrint(std::vector<std::string>* params, std::vector<Compiler::TypeBinder>* typeBinders);
+    static std::string processIf(std::vector<std::string>* params,  std::vector<Compiler::TypeBinder>* typeBinders);
+    static std::string processElse(std::vector<std::string>* params,  std::vector<Compiler::TypeBinder>* typeBinders);
+    static std::string processWhile(std::vector<std::string> *params, std::vector<Compiler::TypeBinder> *typeBinders);
+    static std::string processFor(std::vector<std::string> *paras, std::vector<Compiler::TypeBinder> *typeBinders);
 };
 
 

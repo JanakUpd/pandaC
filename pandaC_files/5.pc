@@ -1,0 +1,16 @@
+using pandaC
+
+def int main():
+    for i in range(10):
+        print("Count: " + i)
+
+    for j in range(5, 11):
+        print("Range: " + j)
+
+    for k in range(1, 10, 2):
+        print("Odd: " + k)
+
+    int x = 0
+    while x < 3:
+        print("While: " + x)
+        x = x + 1

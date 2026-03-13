@@ -54,7 +54,6 @@ std::vector<std::string> split(const std::string &s, char delimiter) {
     return tokens;
 }
 
-
 int Compiler::run(std::string file, bool execute, bool log) {
     auto start_time = std::chrono::high_resolution_clock::now();
     if (!isFileValid(file)) {
@@ -105,17 +104,11 @@ int Compiler::run(std::string file, bool execute, bool log) {
                     std::string name = parts[0];
                     std::string patternStr = parts[1];
                     std::string funcStr = parts[2];
-
                     size_t flags = 0;
-                    if (parts.size() >= 4) {
-                        try { flags = std::stoul(parts[3]); } catch(...) { flags = 0; }
-                    }
+                    if (parts.size() >= 4) { try { flags = std::stoul(parts[3]); } catch(...) { flags = 0; } }
 
                     if (name.empty() || funcStr.empty()) continue;
-
-                    if (name == "print") {
-                        CodeConvertion::cppLibrariesUsed.insert("iostream");
-                    }
+                    if (name == "print") CodeConvertion::cppLibrariesUsed.insert("iostream");
 
                     bool found = false;
                     for (auto &existing : keywords) {
@@ -125,10 +118,7 @@ int Compiler::run(std::string file, bool execute, bool log) {
                             break;
                         }
                     }
-
-                    if (!found) {
-                        keywords.emplace_back(name, std::vector<std::string>{patternStr + "@@@" + funcStr}, flags);
-                    }
+                    if (!found) keywords.emplace_back(name, std::vector<std::string>{patternStr + "@@@" + funcStr}, flags);
                 }
             }
             else if (parsingTypeBinders) {
@@ -137,10 +127,8 @@ int Compiler::run(std::string file, bool execute, bool log) {
                     std::string pandaName = parts[1];
                     int varTypeInt = static_cast<int>(Compiler::VarType::None);
                     size_t flags = 0;
-
                     if (parts.size() > 2) { try { varTypeInt = std::stoi(parts[2]); } catch(...) {} }
                     if (parts.size() > 3) { try { flags = std::stoul(parts[3]); } catch(...) {} }
-
                     typeBinders.emplace_back(cppName, pandaName, static_cast<Compiler::VarType>(varTypeInt), flags);
                 }
             }
@@ -156,7 +144,65 @@ int Compiler::run(std::string file, bool execute, bool log) {
         return 1;
     }
     std::string mainCode = CodeConvertion::convert(in, keywords, typeBinders);
+    in.close();
 
+    std::string pandaClibraries = "";
+
+    for (auto &item: CodeConvertion::pandaCLibrariesUsed) {
+        // 1. Resolve Paths
+        std::filesystem::path libFolder = "../libraries/" + item;
+        std::filesystem::path cppPath = libFolder / (item + ".cpp");
+        std::filesystem::path confPath = libFolder / (item + ".conf");
+
+        if (!std::filesystem::exists(cppPath)) {
+            cppPath = "../libraries/" + item + ".cpp";
+        }
+
+        // 2. Read Source Code
+        pandaClibraries += "//START OF BLOCK: " + item + "\n\n";
+        std::ifstream inLib(cppPath);
+        if (inLib.is_open()) {
+            std::string libLine;
+            while (std::getline(inLib, libLine))
+                pandaClibraries += libLine + "\n";
+            inLib.close();
+        } else {
+            if (log) Notifier::notifyInfo("Warning: Could not find source for library " + item);
+        }
+        pandaClibraries += "//END OF BLOCK: " + item + "\n\n";
+
+        // 3. Read Config (extract CppLibraries)
+        if (std::filesystem::exists(confPath)) {
+            std::ifstream inConf(confPath);
+            std::string confLine;
+            bool parsingCppLibs = false;
+            while (std::getline(inConf, confLine)) {
+                if (confLine.find("CppLibraries = {") != std::string::npos) {
+                    parsingCppLibs = true;
+                    continue;
+                }
+                if (parsingCppLibs) {
+                    if (confLine.find("}") != std::string::npos) {
+                        parsingCppLibs = false;
+                        continue;
+                    }
+
+                    // ROBUST PARSING logic
+                    size_t first = confLine.find_first_not_of(" \t\r\n");
+                    if (first == std::string::npos) continue; // Skip empty lines or pure whitespace
+                    size_t last = confLine.find_last_not_of(" \t\r\n");
+                    std::string libName = confLine.substr(first, (last - first + 1));
+
+                    if (!libName.empty()) {
+                        CodeConvertion::cppLibrariesUsed.insert(libName);
+                    }
+                }
+            }
+            inConf.close();
+        }
+    }
+
+    // --- Output Generation ---
     std::string pathToOutput = file.substr(0, file.rfind('/')) + "/pandaC_build";
     ensureExists(pathToOutput);
     std::string filenameOnly = file.substr(file.rfind('/'));
@@ -166,20 +212,10 @@ int Compiler::run(std::string file, bool execute, bool log) {
 
     for (auto &item: CodeConvertion::cppLibrariesUsed)
         out << "#include <" << item << ">\n";
-    std::string pandaClibraries = "";
 
-    for (auto &item: CodeConvertion::pandaCLibrariesUsed) {
-        pandaClibraries += "//START OF BLOCK: " + item + "\n\n";
-        std::ifstream inLib("../libraries/" + item + ".cpp");
-        std::string libLine;
-        while (std::getline(inLib, libLine))
-            pandaClibraries += libLine + "\n";
-        pandaClibraries += "//END OF BLOCK: " + item + "\n\n";
-    }
     out << pandaClibraries;
     out << mainCode;
     out.close();
-    in.close();
 
     if (std::system(("g++ -std=c++23 " + outputFile + ".cpp" + " -o " + outputFile).c_str()) != 0) {
         if (log) Notifier::notifyError(ERROR_TYPE::UNKNOWN_ERROR);

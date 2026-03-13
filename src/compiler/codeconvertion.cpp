@@ -216,7 +216,7 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
         }
         else if (command.starts_with("using ")) {
             std::vector<std::string> params{command.substr(6)};
-            processUsing(&params, &typeBinders);
+            pandaCLibrariesUsed.emplace(params[0]);
         }
         else {
             bool matchedKeyword = false;
@@ -262,6 +262,16 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
                     std::string val = (command.length() > 6) ? command.substr(7) : "";
                     std::vector<std::string> p{val};
                     finalCppCode += createIndentation(lineIndent) + processReturn(&p, &typeBinders);
+                }
+                else if (command.starts_with("while ")) {
+                    std::string cond = (command.length() > 6) ? command.substr(6) : "";
+                    std::vector<std::string> p{cond};
+                    finalCppCode += createIndentation(lineIndent) + processWhile(&p, &typeBinders);
+                }
+                else if (command.starts_with("for ")) {
+                    std::string cond = (command.length() > 4) ? command.substr(4) : "";
+                    std::vector<std::string> p{cond};
+                    finalCppCode += createIndentation(lineIndent) + processFor(&p, &typeBinders);
                 }
                 else
                     finalCppCode += createIndentation(lineIndent) + command + ";\n";
@@ -406,13 +416,6 @@ std::string CodeConvertion::processDef(std::vector<std::string> *params,
     return returnType + " " + funcName + "(" + translatedArgs + ") {\n";
 }
 
-std::string CodeConvertion::processUsing(std::vector<std::string> *params,
-                                         std::vector<Compiler::TypeBinder> *typeBinders) {
-    if (params->size() == 1)
-        pandaCLibrariesUsed.emplace((*params)[0]);
-    return "";
-}
-
 std::string CodeConvertion::processReturn(std::vector<std::string> *params,
                                           std::vector<Compiler::TypeBinder> *typeBinders) {
     if (params->empty()) return "return;\n";
@@ -423,4 +426,75 @@ std::string CodeConvertion::processReturn(std::vector<std::string> *params,
     }
     res += ";\n";
     return res;
+}
+std::string CodeConvertion::processIf(std::vector<std::string> *params, std::vector<Compiler::TypeBinder> *typeBinders) {
+    if (params->empty()) return "";
+    std::string cond = (*params)[0];
+
+    if (!cond.empty() && cond.back() == ':') cond.pop_back();
+    while (!cond.empty() && std::isspace(cond.back())) cond.pop_back();
+
+    return "if (" + cond + ") {\n";
+}
+
+std::string CodeConvertion::processElse(std::vector<std::string> *params, std::vector<Compiler::TypeBinder> *typeBinders) {
+    return "else {\n";
+}
+std::string CodeConvertion::processWhile(std::vector<std::string> *params, std::vector<Compiler::TypeBinder> *typeBinders) {
+    if (params->empty()) return "";
+    std::string cond = (*params)[0];
+
+    if (!cond.empty() && cond.back() == ':') cond.pop_back();
+    while (!cond.empty() && std::isspace(cond.back())) cond.pop_back();
+
+    return "while (" + cond + ") {\n";
+}
+
+std::string CodeConvertion::processFor(std::vector<std::string> *params, std::vector<Compiler::TypeBinder> *typeBinders) {
+    if (params->empty()) return "";
+    std::string line = (*params)[0];
+
+    std::string intType = "int";
+    if (typeBinders) {
+        for (const auto &tb : *typeBinders) {
+            if (tb.pandacName == "int") {
+                intType = tb.cppName;
+                break;
+            }
+        }
+    }
+
+    if (!line.empty() && line.back() == ':') line.pop_back();
+
+    size_t inPos = line.find(" in ");
+    if (inPos != std::string::npos) {
+        std::string varName = line.substr(0, inPos);
+        std::string iterator = line.substr(inPos + 4);
+
+        while (!varName.empty() && std::isspace(varName.back())) varName.pop_back();
+        while (!varName.empty() && std::isspace(varName.front())) varName.erase(0, 1);
+        while (!iterator.empty() && std::isspace(iterator.front())) iterator.erase(0, 1);
+
+        if (iterator.starts_with("range(") && iterator.ends_with(")")) {
+            std::string content = iterator.substr(6, iterator.length() - 7);
+
+            std::vector<std::string> args;
+            std::stringstream ss(content);
+            std::string arg;
+            while (std::getline(ss, arg, ',')) {
+                args.push_back(arg);
+            }
+
+            if (args.size() == 1)
+                return "for (" + intType + " " + varName + " = 0; " + varName + " < " + args[0] + "; ++" + varName + ") {\n";
+            if (args.size() == 2)
+                return "for (" + intType + " " + varName + " = " + args[0] + "; " + varName + " < " + args[1] + "; ++" + varName + ") {\n";
+            if (args.size() == 3)
+                return "for (" + intType + " " + varName + " = " + args[0] + "; " + varName + " < " + args[1] + "; " + varName + " += " + args[2] + ") {\n";
+        }
+
+        return "for (auto " + varName + " : " + iterator + ") {\n";
+    }
+
+    return "for (" + line + ") {\n";
 }

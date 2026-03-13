@@ -1,8 +1,4 @@
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <concepts>
-#include <type_traits>
+template<typename T> struct Var;
 
 template<typename T>
 std::string to_str(const T &val) {
@@ -15,20 +11,88 @@ std::string to_str(const T &val) {
     }
 }
 
+template<typename T> struct Array;
+template<typename T> struct List;
+
+template<typename T>
+struct Array {
+    std::vector<Var<T>> data;
+
+    size_t len() const { return data.size(); }
+
+    const T& operator [](size_t ind) const { return data[ind].value; }
+    Var<T>& operator [](size_t ind) { return data[ind]; }
+
+    ~Array() { data.clear(); }
+};
+
 template<typename T>
 struct Var {
     T value;
     Var() : value(T{}) {}
     Var(const T &v) : value(v) {}
+
     template<typename U> requires (!std::is_same_v<std::decay_t<U>, T> && std::convertible_to<U, T>)
     Var(const U &v) : value(v) {}
+
+    explicit Var(const Var<std::string> &v) requires (!std::is_same_v<T, std::string>) {
+        std::stringstream ss(v.value);
+        if (!(ss >> value))
+            throw std::runtime_error("failed to parse '" + v.value + "' to target type.");
+    }
+
     operator T &() { return value; }
     operator const T &() const { return value; }
+
     Var &operator=(const T &v) {
         value = v;
         return *this;
     }
+
+    Var<std::string> substr(const Var<int>& start, const Var<int>& end) const
+        requires std::is_same_v<T, std::string>;
+
+    Array<std::string> split(const Var<std::string>& delimiter) const
+        requires std::is_same_v<T, std::string>;
 };
+
+
+template<typename T>
+struct List {
+    std::list<Var<T>> data;
+
+    size_t len() const { return data.size(); }
+
+    const T& operator [](size_t ind) {
+        auto it = data.begin();
+        std::advance(it, ind);
+        return it->value;
+    }
+    ~List() { data.clear(); }
+};
+
+template<typename T>
+Var<std::string> Var<T>::substr(const Var<int>& a, const Var<int>& b) const requires std::is_same_v<T, std::string> {
+    Var<std::string> result = "";
+    for (size_t it = 0; it < value.size(); ++it)
+        if (it >= a.value && it < b.value)
+             result.value.push_back(value[it]);
+    return result;
+}
+
+template<typename T>
+Array<std::string> Var<T>::split(const Var<std::string>& delimiter) const requires std::is_same_v<T, std::string> {
+    Array<std::string> result;
+    size_t start = 0;
+    size_t pos = value.find(delimiter.value);
+    while (pos != std::string::npos) {
+        result.data.push_back(value.substr(start, pos - start));
+        start = pos + delimiter.value.size();
+        pos = value.find(delimiter.value, start);
+    }
+    result.data.push_back(value.substr(start));
+    return result;
+}
 
 template<typename T>
 std::ostream &operator<<(std::ostream &os, const Var<T> &v) {
@@ -79,4 +143,11 @@ auto operator+(U lhs, const Var<T> &rhs) {
         return Var<std::string>(to_str(lhs) + rhs.value);
     else
         return Var<decltype(lhs + rhs.value)>(lhs + rhs.value);
+}
+
+Var<std::string> input(Var<std::string> prompt = "") {
+    if (prompt.value != "") std::cout << prompt.value;
+    std::string s;
+    std::getline(std::cin, s);
+    return Var<std::string>(s);
 }
