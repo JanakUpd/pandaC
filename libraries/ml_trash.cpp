@@ -357,17 +357,15 @@ protected:
     double activate(double z) const override {return z;}
     double activation_derivative_from_output(double) const override {return 1.0;}
 public:
-    LinearRegression(uint64_t feature_count, std::unique_ptr<ILoss> loss,std::unique_ptr<IOptimizer> optimizer): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
+    LinearRegression(uint64_t feature_count, std::unique_ptr<ILoss> loss = std::make_unique<MeanSquaredError>(), std::unique_ptr<IOptimizer> optimizer = std::make_unique<SGD>(0.01)): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
 };
 
 class LogisticRegression final : public BaseGradientModel {
 protected:
     double activate(double z) const override {return sigmoid(z);}
-
     double activation_derivative_from_output(double y_pred) const override {return y_pred * (1.0 - y_pred);}
-
 public:
-    LogisticRegression(uint64_t feature_count,std::unique_ptr<ILoss> loss,std::unique_ptr<IOptimizer> optimizer): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
+    LogisticRegression(uint64_t feature_count, std::unique_ptr<ILoss> loss = std::make_unique<BinaryCrossEntropy>(), std::unique_ptr<IOptimizer> optimizer = std::make_unique<Adam>(0.01)): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
     int predict_class(const Vector& x, double threshold = 0.5) const {return predict(x) >= threshold ? 1 : 0;}
 };
 
@@ -378,7 +376,7 @@ private:
     uint64_t k_;
     std::unique_ptr<IDistance> distance_;
 public:
-    KNNClassifier(uint64_t k, std::unique_ptr<IDistance> distance): k_(k), distance_(std::move(distance)) {if (k_ == 0 || !distance_) throw std::invalid_argument("KNN: invalid parameters");}
+    KNNClassifier(uint64_t k, std::unique_ptr<IDistance> distance = std::make_unique<EuclideanDistance>()): k_(k), distance_(std::move(distance)) {if (k_ == 0 || !distance_) throw std::invalid_argument("KNN: invalid parameters");}
     void fit(const Matrix& X, const Vector& y) override {
         validate_supervised_dataset(X, y);
         if (k_ > X.size()) throw std::invalid_argument("KNN: k > sample count");
@@ -432,7 +430,6 @@ private:
     std::unique_ptr<ISplitCriterion> criterion_;
     uint64_t max_depth_;
     uint64_t min_samples_split_;
-
     struct SplitResult {
         bool valid = false;
         uint64_t feature_index = 0;
@@ -441,7 +438,6 @@ private:
         std::vector<uint64_t> right_indices;
         double score = std::numeric_limits<double>::infinity();
     };
-
     SplitResult find_best_split(const Matrix& X, const Vector& y) const {
         const uint64_t n = X.size();
         const uint64_t m = X[0].size();
@@ -515,7 +511,7 @@ private:
         return node;
     }
 public:
-    DecisionTreeClassifier(std::unique_ptr<ISplitCriterion> criterion, uint64_t max_depth = 5, uint64_t min_samples_split = 2) : criterion_(std::move(criterion)), max_depth_(max_depth), min_samples_split_(min_samples_split) {
+    DecisionTreeClassifier(std::unique_ptr<ISplitCriterion> criterion = std::make_unique<GiniCriterion>(), uint64_t max_depth = 5, uint64_t min_samples_split = 2) : criterion_(std::move(criterion)), max_depth_(max_depth), min_samples_split_(min_samples_split) {
         if (!criterion_) throw std::invalid_argument("DecisionTree: criterion is null");
     }
     void fit(const Matrix& X, const Vector& y) override {
@@ -553,7 +549,7 @@ private:
         return best_idx;
     }
 public:
-    KMeans(uint64_t k, std::unique_ptr<IDistance> distance, uint64_t max_iters = 100, double tol = 1e-6): k_(k), max_iters_(max_iters), tol_(tol), distance_(std::move(distance)) {
+    KMeans(uint64_t k, std::unique_ptr<IDistance> distance =  std::make_unique<EuclideanDistance>(), uint64_t max_iters = 100, double tol = 1e-6): k_(k), max_iters_(max_iters), tol_(tol), distance_(std::move(distance)) {
         if (k_ == 0 || !distance_) throw std::invalid_argument("KMeans: invalid parameters");
     }
     void fit(const Matrix& X) override {
