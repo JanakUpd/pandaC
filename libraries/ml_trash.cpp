@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <memory>
+#include <limits>
 
 using Vector = std::vector<double>;
 using Matrix = std::vector<Vector>;
@@ -289,10 +290,7 @@ public:
     double impurity(const Vector& y) const override {
         if (y.empty()) return 0.0;
         std::unordered_map<int, int> counts;
-        for (double value : y) {
-            ++counts[static_cast<int>(std::round(value))];
-        }
-
+        for (double value : y) ++counts[static_cast<int>(std::round(value))];
         const double n = static_cast<double>(y.size());
         double sum_sq = 0.0;
         for (const auto& [cls, cnt] : counts) {
@@ -415,6 +413,122 @@ public:
             }
         }
         return static_cast<double>(best_class);
+    }
+};
+
+struct TreeNode {
+    bool is_leaf = false;
+    double prediction = 0.0;
+    uint64_t feature_index = 0;
+    double threshold = 0.0;
+    std::unique_ptr<TreeNode> left;
+    std::unique_ptr<TreeNode> right;
+};
+
+class DecisionTreeClassifier final : public ISupervisedModel {
+private:
+    std::unique_ptr<TreeNode> root_;
+    std::unique_ptr<ISplitCriterion> criterion_;
+    uint64_t max_depth_;
+    uint64_t min_samples_split_;
+
+    struct SplitResult {
+        bool valid = false;
+        uint64_t feature_index = 0;
+        double threshold = 0.0;
+        std::vector<uint64_t> left_indices;
+        std::vector<uint64_t> right_indices;
+        double score = std::numeric_limits<double>::infinity();
+    };
+
+    SplitResult find_best_split(const Matrix& X, const Vector& y) const {
+        const uint64_t n = X.size();
+        const uint64_t m = X[0].size();
+        SplitResult best;
+        for (uint64_t feature = 0; feature < m; ++feature) {
+            std::vector<double> values;
+            values.reserve(n);
+            for (const auto& row : X) values.push_back(row[feature]);
+            std::sort(values.begin(), values.end());
+            values.erase(std::unique(values.begin(), values.end()), values.end());
+            if (values.size() < 2) continue;
+            for (uint64_t t = 0; t + 1 < values.size(); ++t) {
+                const double threshold = 0.5 * (values[t] + values[t + 1]);
+                std::vector<uint64_t> left_idx;
+                std::vector<uint64_t> right_idx;
+                for (uint64_t i = 0; i < n; ++i) {
+                    if (X[i][feature] <= threshold) left_idx.push_back(i);
+                    else right_idx.push_back(i);
+                }
+                if (left_idx.empty() || right_idx.empty()) continue;
+                Vector y_left, y_right;
+                y_left.reserve(left_idx.size());
+                y_right.reserve(right_idx.size());
+                for (uint64_t idx : left_idx) y_left.push_back(y[idx]);
+                for (uint64_t idx : right_idx) y_right.push_back(y[idx]);
+                const double n_left = static_cast<double>(y_left.size());
+                const double n_right = static_cast<double>(y_right.size());
+                const double n_total = static_cast<double>(n);
+                const double score = (n_left / n_total) * criterion_->impurity(y_left) + (n_right / n_total) * criterion_->impurity(y_right);
+                if (score < best.score) {
+                    best.valid = true;
+                    best.feature_index = feature;
+                    best.threshold = threshold;
+                    best.left_indices = std::move(left_idx);
+                    best.right_indices = std::move(right_idx);
+                    best.score = score;
+                }
+            }
+        }
+        return best;
+    }
+    std::unique_ptr<TreeNode> build_tree(const Matrix& X, const Vector& y, uint64_t depth) const {
+        auto node = std::make_unique<TreeNode>();
+        node->prediction = majority_class(y);
+        if (y.empty() ||
+            depth >= max_depth_ ||
+            X.size() < min_samples_split_ ||
+            all_same_class(y)) {
+            node->is_leaf = true;
+            return node;
+        }
+        SplitResult split = find_best_split(X, y);
+        if (!split.valid) {
+            node->is_leaf = true;
+            return node;
+        }
+        Matrix X_left, X_right;
+        Vector y_left, y_right;
+        for (uint64_t idx : split.left_indices) {
+            X_left.push_back(X[idx]);
+            y_left.push_back(y[idx]);
+        }
+        for (uint64_t idx : split.right_indices) {
+            X_right.push_back(X[idx]);
+            y_right.push_back(y[idx]);
+        }
+        node->feature_index = split.feature_index;
+        node->threshold = split.threshold;
+        node->left = build_tree(X_left, y_left, depth + 1);
+        node->right = build_tree(X_right, y_right, depth + 1);
+        return node;
+    }
+public:
+    DecisionTreeClassifier(std::unique_ptr<ISplitCriterion> criterion, uint64_t max_depth = 5, uint64_t min_samples_split = 2) : criterion_(std::move(criterion)), max_depth_(max_depth), min_samples_split_(min_samples_split) {
+        if (!criterion_) throw std::invalid_argument("DecisionTree: criterion is null");
+    }
+    void fit(const Matrix& X, const Vector& y) override {
+        validate_supervised_dataset(X, y);
+        root_ = build_tree(X, y, 0);
+    }
+    double predict(const Vector& x) const override {
+        if (!root_) throw std::runtime_error("DecisionTree is not fitted");
+        const TreeNode* node = root_.get();
+        while (!node->is_leaf) {
+            if (x[node->feature_index] <= node->threshold) node = node->left.get();
+            else node = node->right.get();
+        }
+        return node->prediction;
     }
 };
 
