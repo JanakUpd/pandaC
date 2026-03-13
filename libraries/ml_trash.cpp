@@ -532,4 +532,59 @@ public:
     }
 };
 
+class KMeans final : public IUnsupervisedModel {
+private:
+    uint64_t k_;
+    uint64_t max_iters_;
+    double tol_;
+    Matrix centroids_;
+    std::unique_ptr<IDistance> distance_;
+    uint64_t nearest_centroid(const Vector& x) const {
+        uint64_t best_idx = 0;
+        double best_dist = std::numeric_limits<double>::infinity();
+        for (uint64_t i = 0; i < centroids_.size(); ++i) {
+            const double d = distance_->compute(x, centroids_[i]);
+            if (d < best_dist) {
+                best_dist = d;
+                best_idx = i;
+            }
+        }
+        return best_idx;
+    }
+public:
+    KMeans(uint64_t k, std::unique_ptr<IDistance> distance, uint64_t max_iters = 100, double tol = 1e-6): k_(k), max_iters_(max_iters), tol_(tol), distance_(std::move(distance)) {
+        if (k_ == 0 || !distance_) throw std::invalid_argument("KMeans: invalid parameters");
+    }
+    void fit(const Matrix& X) override {
+        validate_matrix(X);
+        if (k_ > X.size()) throw std::invalid_argument("KMeans: k > sample count");
+        centroids_.assign(X.begin(), X.begin() + static_cast<std::ptrdiff_t>(k_));
+        std::vector<uint64_t> assignments(X.size(), 0);
+        for (uint64_t iter = 0; iter < max_iters_; ++iter) {
+            for (uint64_t i = 0; i < X.size(); i++) assignments[i] = nearest_centroid(X[i]);
+            Matrix new_centroids(k_, Vector(X[0].size(), 0.0));
+            std::vector<uint64_t> counts(k_, 0);
+            for (uint64_t i = 0; i < X.size(); i++) {
+                const uint64_t cluster = assignments[i];
+                for (uint64_t j = 0; j < X[i].size(); j++) new_centroids[cluster][j] += X[i][j];
+                ++counts[cluster];
+            }
+            for (uint64_t c = 0; c < k_; c++) {
+                if (counts[c] == 0) new_centroids[c] = centroids_[c];
+                else for (uint64_t j = 0; j < new_centroids[c].size(); j++) new_centroids[c][j] /= static_cast<double>(counts[c]);
+            }
+            double shift = 0.0;
+            for (uint64_t c = 0; c < k_; c++) shift += distance_->compute(centroids_[c], new_centroids[c]);
+            centroids_ = std::move(new_centroids);
+            if (shift < tol_) break;
+        }
+    }
+    uint64_t predict_cluster(const Vector& x) const {
+        if (centroids_.empty()) throw std::runtime_error("KMeans is not fitted");
+        return nearest_centroid(x);
+    }
+
+    const Matrix& centroids() const {return centroids_;}
+};
+
 int main() {return 0;}
