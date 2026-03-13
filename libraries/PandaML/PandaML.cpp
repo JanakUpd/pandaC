@@ -1,15 +1,3 @@
-#include <iostream>
-#include <vector>
-#include <cmath>
-#include <random>
-#include <cstdint>
-#include <stdexcept>
-#include <unordered_map>
-#include <algorithm>
-#include <memory>
-#include <limits>
-#include <numeric>
-
 using Vector = std::vector<double>;
 using Matrix = std::vector<Vector>;
 
@@ -653,5 +641,3 @@ public:
     }
     const Matrix& components() const {return components_;}
 };
-
-int main() {return 0;}
