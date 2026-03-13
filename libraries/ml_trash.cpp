@@ -588,6 +588,74 @@ public:
     const Matrix& centroids() const {return centroids_;}
 };
 
-
+class PCA final : public ITransformer {
+private:
+    std::size_t n_components_;
+    Vector mean_;
+    Matrix components_;
+    static Vector power_iteration(const Matrix& A, std::size_t max_iters = 200, double tol = 1e-8) {
+        const std::size_t n = A.size();
+        Vector b(n, 1.0 / std::sqrt(static_cast<double>(n)));
+        for (std::size_t iter = 0; iter < max_iters; ++iter) {
+            Vector Ab(n, 0.0);
+            for (std::size_t i = 0; i < n; i++) {
+                for (std::size_t j = 0; j < n; j++) Ab[i] += A[i][j] * b[j];
+            }
+            const double norm_Ab = norm(Ab);
+            if (norm_Ab < 1e-15) break;
+            Vector next_b = divide(Ab, norm_Ab);
+            Vector diff = subtract(next_b, b);
+            if (norm(diff) < tol) {
+                b = next_b;
+                break;
+            }
+            b = next_b;
+        }
+        return b;
+    }
+    static double eigenvalue_from_vector(const Matrix& A, const Vector& v) {
+        Vector Av(v.size(), 0.0);
+        for (std::size_t i = 0; i < A.size(); i++) {
+            for (std::size_t j = 0; j < A[i].size(); j++) Av[i] += A[i][j] * v[j];
+        }
+        return dot_product(v, Av);
+    }
+    static void deflate(Matrix& A, const Vector& v, double lambda) {
+        for (std::size_t i = 0; i < A.size(); i++) {
+            for (std::size_t j = 0; j < A[i].size(); j++) A[i][j] -= lambda * v[i] * v[j];
+        }
+    }
+public:
+    explicit PCA(std::size_t n_components): n_components_(n_components) {
+        if (n_components_ == 0) throw std::invalid_argument("PCA: n_components must be > 0");
+    }
+    void fit(const Matrix& X) override {
+        validate_matrix(X);
+        const std::size_t m = X[0].size();
+        if (n_components_ > m) throw std::invalid_argument("PCA: n_components > feature count");
+        mean_ = compute_column_mean(X);
+        Matrix centered = center_matrix(X, mean_);
+        Matrix cov = covariance_matrix(centered);
+        components_.clear();
+        Matrix current = cov;
+        for (std::size_t c = 0; c < n_components_; ++c) {
+            Vector eigenvector = power_iteration(current);
+            double eigenvalue = eigenvalue_from_vector(current, eigenvector);
+            components_.push_back(eigenvector);
+            deflate(current, eigenvector, eigenvalue);
+        }
+    }
+    Matrix transform(const Matrix& X) const override {
+        if (components_.empty()) throw std::runtime_error("PCA is not fitted");
+        validate_matrix(X);
+        Matrix centered = center_matrix(X, mean_);
+        Matrix result(centered.size(), Vector(n_components_, 0.0));
+        for (std::size_t i = 0; i < centered.size(); i++) {
+            for (std::size_t c = 0; c < n_components_; c++) result[i][c] = dot_product(centered[i], components_[c]);
+        }
+        return result;
+    }
+    const Matrix& components() const {return components_;}
+};
 
 int main() {return 0;}
