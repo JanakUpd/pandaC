@@ -13,6 +13,7 @@
 #include <vector>
 //START OF BLOCK: pandaC
 
+#include <vector>
 template<typename T> struct Var;
 
 template<typename T>
@@ -28,18 +29,6 @@ std::string to_str(const T &val) {
 
 template<typename T> struct Array;
 template<typename T> struct List;
-
-template<typename T>
-struct Array {
-    std::vector<Var<T>> data;
-
-    size_t len() const { return Var(data.size()); }
-
-    const T& operator [](size_t ind) const { return data[ind].value; }
-    Var<T>& operator [](size_t ind) { return data[ind]; }
-
-    ~Array() { data.clear(); }
-};
 
 template<typename T>
 struct Var {
@@ -71,6 +60,16 @@ struct Var {
         requires std::is_same_v<T, std::string>;
 };
 
+template<typename T>
+struct Array {
+    std::vector<T> data;
+
+    Var<size_t> len() const { return Var<size_t>(data.size()); }
+
+    const T& operator [](size_t ind) const { return data[ind]; }
+    T& operator [](size_t ind) { return data[ind]; }
+    ~Array() { data.clear(); }
+};
 
 template<typename T>
 struct List {
@@ -86,6 +85,16 @@ struct List {
     ~List() { data.clear(); }
 };
 
+template<typename T>
+struct Matr
+{
+    std::vector<std::vector<T>> data;
+
+    Var<size_t> rows() const { return Var<size_t>(data.size()); }
+    Var<size_t> cols() const { return data.empty() ? Var<size_t>(0) : Var<size_t>(data[0].size()); }
+
+    const Var<T>& operator()(size_t row, size_t col) const { return data[row][col]; }
+};
 template<typename T>
 Var<std::string> Var<T>::substr(const Var<int>& a, const Var<int>& b) const requires std::is_same_v<T, std::string> {
     Var<std::string> result = "";
@@ -415,11 +424,11 @@ public:
 
 int main() {
     std::cout<<"PCT Library Test"<<'\n';
-    Array<Var<std::string>> product_names;
+    Array<std::string> product_names;
     product_names.data = {"Laptop", "Mouse", "Monitor", "Keyboard", "HDMI Cable"};
     Array<Var<int32_t>> stock_levels;
     stock_levels.data = {15, 120, 45, 60, 200};
-    Array<Var<double>> unit_prices;
+    Array<double> unit_prices;
     unit_prices.data = {1200.50, 25.00, 300.99, 45.00, 12.50};
     DataFrame inventory;
     inventory.add_column(product_names, "Product");

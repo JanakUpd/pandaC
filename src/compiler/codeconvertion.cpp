@@ -80,8 +80,6 @@ bool matchPattern(const std::string &line, const std::string &pattern, std::vect
 
 std::vector<std::string> CodeConvertion::parseArguments(const std::string &argsStr, size_t paramFlags) {
     std::vector<std::string> params;
-    bool useSpacing = (paramFlags & static_cast<size_t>(Compiler::Parameters::Spacing)) != 0;
-    bool useBracketing = (paramFlags & static_cast<size_t>(Compiler::Parameters::Bracketing)) != 0;
 
     std::string buffer;
     bool inBrackets = false;
@@ -117,7 +115,7 @@ std::pair<size_t, std::string> CodeConvertion::parseLine(const std::string &line
 }
 
 std::string CodeConvertion::adjustBraces(size_t currentIndent, size_t newIndent) {
-    std::string result = "";
+    std::string result{};
     for (size_t i = currentIndent; i > newIndent; i -= 4) {
         result += CodeConvertion::createIndentation(i - 4) + "}\n";
     }

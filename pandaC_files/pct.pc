@@ -34,4 +34,3 @@ def int main()
         if stock_levels[i] < 50:
             string alert_msg = " * " + product_names[i] + " (" + Var(stock_levels[i]) + ")"
             print(alert_msg)
-

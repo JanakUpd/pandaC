@@ -1,25 +1,22 @@
 using pandaC
-using ml_trash
+using PandaML
 
-def int main()
+def main()
     print("ML Trash Library Test")
-    Array<double> x_train
-    x_train.data = {1.0, 2.0, 3.0, 4.0, 5.0}
+    Matr<fl2> x_train
+    x_train.data = {{1.0}, {2.0}, {3.0}, {4.0}, {5.0}}
 
-    Array<double> y_train
+    Array<fl2> y_train
     y_train.data = {3.0, 5.0, 7.0, 9.0, 11.0}
 
-    LinearRegression model
-    print("Training model on " + x_train.len() + " samples...")
-    model.fit(x_train, y_train);
+    LinearRegression model(x_train.cols())
+    print("Training model on " + x_train.cols() + " samples...")
+    model.fit(x_train.data, y_train.data)
 
-    print("Model Slope: " + model.slope)
-    print("Model Intercept: " + model.intercept)
+    Array<fl2> unknown
+    unknown.data = {10.0}
+    fl2 prediction = model.predict(unknown.data)
 
-    fl2 unknown = 10.0
-    fl2 prediction = model.predict_single(unknown)
-
-    print("Prediction for input " + unknown + ": " + prediction)
     fl2 error = prediction - 21.0
 
     if error * error < 0.001:

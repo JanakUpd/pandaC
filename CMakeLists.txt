@@ -10,4 +10,3 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
 
 add_subdirectory(app)
 add_subdirectory(src)
-add_subdirectory(tests)

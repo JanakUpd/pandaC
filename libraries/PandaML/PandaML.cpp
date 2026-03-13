@@ -345,7 +345,7 @@ protected:
     double activate(double z) const override {return z;}
     double activation_derivative_from_output(double) const override {return 1.0;}
 public:
-    LinearRegression(uint64_t feature_count, std::unique_ptr<ILoss> loss = std::make_unique<MeanSquaredError>(), std::unique_ptr<IOptimizer> optimizer = std::make_unique<SGD>(0.01)): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
+    LinearRegression(uint64_t feature_count = 0, std::unique_ptr<ILoss> loss = std::make_unique<MeanSquaredError>(), std::unique_ptr<IOptimizer> optimizer = std::make_unique<SGD>(0.01)): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
 };
 
 class LogisticRegression final : public BaseGradientModel {
