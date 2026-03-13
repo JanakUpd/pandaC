@@ -226,12 +226,12 @@ int Compiler::run(std::string file, bool execute, bool log) {
         return 1;
     }
 
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now() - start_time);
     if (log)
         Notifier::notifyInfo(
             "Compilation finished successfully in " + (duration.count() == 0 ? "<1" : std::to_string(duration.count()))
-            + " seconds.");
+            + " miliseconds.");
 
     if (execute) {
 #ifdef _WIN32

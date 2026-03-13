@@ -221,7 +221,7 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
             auto *keyword = findKeyword(command, keywords);
             if (keyword) {
                 for (const auto &mapEntry: keyword->maps) {
-                    size_t sep = mapEntry.find("@@@");
+                    size_t sep = mapEntry.find("@");
                     if (sep == std::string::npos) continue;
 
                     std::string pattern = mapEntry.substr(0, sep);
@@ -247,32 +247,7 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
 
             if (!matchedKeyword) {
                 command = convertTypes(command, typeBinders);
-                if (command.starts_with("if ")) {
-                    std::string cond = command.substr(3);
-                    std::vector<std::string> p{cond};
-                    finalCppCode += createIndentation(lineIndent) + processIf(&p, &typeBinders);
-                }
-                else if (command.starts_with("else")) {
-                    std::vector<std::string> p;
-                    finalCppCode += createIndentation(lineIndent) + processElse(&p, &typeBinders);
-                }
-                else if (command.starts_with("return")) {
-                    std::string val = (command.length() > 6) ? command.substr(7) : "";
-                    std::vector<std::string> p{val};
-                    finalCppCode += createIndentation(lineIndent) + processReturn(&p, &typeBinders);
-                }
-                else if (command.starts_with("while ")) {
-                    std::string cond = (command.length() > 6) ? command.substr(6) : "";
-                    std::vector<std::string> p{cond};
-                    finalCppCode += createIndentation(lineIndent) + processWhile(&p, &typeBinders);
-                }
-                else if (command.starts_with("for ")) {
-                    std::string cond = (command.length() > 4) ? command.substr(4) : "";
-                    std::vector<std::string> p{cond};
-                    finalCppCode += createIndentation(lineIndent) + processFor(&p, &typeBinders);
-                }
-                else
-                    finalCppCode += createIndentation(lineIndent) + command + ";\n";
+                finalCppCode += createIndentation(lineIndent) + command + ";\n";
             }
         }
         currentIndent = lineIndent;
@@ -284,8 +259,7 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
 static std::set<std::string> cppLibrariesUsed;
 static std::set<std::string> pandaCLibrariesUsed;
 
-std::string CodeConvertion::translateArgs(const std::string &rawArgs,
-                                          const std::vector<Compiler::TypeBinder> *typeBinders) {
+std::string CodeConvertion::translateArgs(const std::string &rawArgs, const std::vector<Compiler::TypeBinder> *typeBinders) {
     if (rawArgs.empty()) return "";
     std::string result;
     std::string currentArg;
@@ -412,67 +386,4 @@ std::string CodeConvertion::processDef(std::vector<std::string> *params,
     }
     std::string translatedArgs = translateArgs(rawArgs, typeBinders);
     return returnType + " " + funcName + "(" + translatedArgs + ") {\n";
-}
-
-std::string CodeConvertion::processReturn(std::vector<std::string> *params,
-                                          std::vector<Compiler::TypeBinder> *typeBinders) {
-    if (params->empty()) return "return;\n";
-    std::string res = "return ";
-    for (size_t i = 0; i < params->size(); ++i) {
-        if (i > 0) res += " ";
-        res += (*params)[i];
-    }
-    res += ";\n";
-    return res;
-}
-std::string CodeConvertion::processIf(std::vector<std::string> *params, std::vector<Compiler::TypeBinder> *typeBinders) {
-    if (params->empty()) return "";
-    std::string cond = (*params)[0];
-
-    if (!cond.empty() && cond.back() == ':') cond.pop_back();
-    while (!cond.empty() && std::isspace(cond.back())) cond.pop_back();
-
-    return "if (" + cond + ") {\n";
-}
-
-std::string CodeConvertion::processElse(std::vector<std::string> *params, std::vector<Compiler::TypeBinder> *typeBinders) {
-    return "else {\n";
-}
-std::string CodeConvertion::processWhile(std::vector<std::string> *params, std::vector<Compiler::TypeBinder> *typeBinders) {
-    if (params->empty()) return "";
-    std::string cond = (*params)[0];
-
-    if (!cond.empty() && cond.back() == ':') cond.pop_back();
-    while (!cond.empty() && std::isspace(cond.back())) cond.pop_back();
-
-    return "while (" + cond + ") {\n";
-}
-
-std::string CodeConvertion::processFor(std::vector<std::string> *params, std::vector<Compiler::TypeBinder> *typeBinders) {
-    if (params->empty()) return "";
-    std::string line = (*params)[0];
-
-    std::string intType = "int";
-    if (typeBinders) {
-        for (const auto &tb : *typeBinders) {
-            if (tb.pandacName == "int") {
-                intType = tb.cppName;
-                break;
-            }
-        }
-    }
-
-    if (!line.empty() && line.back() == ':') line.pop_back();
-
-    size_t inPos = line.find(" in ");
-    if (inPos != std::string::npos) {
-        std::string varName = line.substr(0, inPos);
-        std::string iterator = line.substr(inPos + 4);
-
-        while (!varName.empty() && std::isspace(varName.back())) varName.pop_back();
-        while (!varName.empty() && std::isspace(varName.front())) varName.erase(0, 1);
-        while (!iterator.empty() && std::isspace(iterator.front())) iterator.erase(0, 1);
-    }
-
-    return "for (" + line + ") {\n";
 }
