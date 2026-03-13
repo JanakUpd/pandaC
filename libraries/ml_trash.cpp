@@ -358,7 +358,7 @@ protected:
     double activate(double z) const override {return z;}
     double activation_derivative_from_output(double) const override {return 1.0;}
 public:
-    LinearRegression(std::size_t feature_count, std::unique_ptr<ILoss> loss,std::unique_ptr<IOptimizer> optimizer): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
+    LinearRegression(uint64_t feature_count, std::unique_ptr<ILoss> loss,std::unique_ptr<IOptimizer> optimizer): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
 };
 
 class LogisticRegression final : public BaseGradientModel {
@@ -368,8 +368,54 @@ protected:
     double activation_derivative_from_output(double y_pred) const override {return y_pred * (1.0 - y_pred);}
 
 public:
-    LogisticRegression(std::size_t feature_count,std::unique_ptr<ILoss> loss,std::unique_ptr<IOptimizer> optimizer): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
+    LogisticRegression(uint64_t feature_count,std::unique_ptr<ILoss> loss,std::unique_ptr<IOptimizer> optimizer): BaseGradientModel(feature_count, std::move(loss), std::move(optimizer)) {}
     int predict_class(const Vector& x, double threshold = 0.5) const {return predict(x) >= threshold ? 1 : 0;}
+};
+
+class KNNClassifier final : public ISupervisedModel {
+private:
+    Matrix X_train_;
+    Vector y_train_;
+    uint64_t k_;
+    std::unique_ptr<IDistance> distance_;
+public:
+    KNNClassifier(uint64_t k, std::unique_ptr<IDistance> distance): k_(k), distance_(std::move(distance)) {if (k_ == 0 || !distance_) throw std::invalid_argument("KNN: invalid parameters");}
+    void fit(const Matrix& X, const Vector& y) override {
+        validate_supervised_dataset(X, y);
+        if (k_ > X.size()) throw std::invalid_argument("KNN: k > sample count");
+        X_train_ = X;
+        y_train_ = y;
+    }
+    double predict(const Vector& x) const override {
+        if (X_train_.empty()) throw std::runtime_error("KNN is not fitted");
+        std::vector<std::pair<double, int>> distances;
+        distances.reserve(X_train_.size());
+        for (uint64_t i = 0; i < X_train_.size(); ++i) {
+            distances.emplace_back(
+                distance_->compute(x, X_train_[i]),
+                static_cast<int>(std::round(y_train_[i]))
+            );
+        }
+        std::nth_element(
+            distances.begin(),
+            distances.begin() + static_cast<std::ptrdiff_t>(k_),
+            distances.end(),
+            [](const auto& lhs, const auto& rhs) {
+                return lhs.first < rhs.first;
+            }
+        );
+        std::unordered_map<int, int> votes;
+        for (uint64_t i = 0; i < k_; ++i) ++votes[distances[i].second];
+        int best_class = 0;
+        int best_count = -1;
+        for (const auto& [cls, cnt] : votes) {
+            if (cnt > best_count || (cnt == best_count && cls < best_class)) {
+                best_class = cls;
+                best_count = cnt;
+            }
+        }
+        return static_cast<double>(best_class);
+    }
 };
 
 int main() {return 0;}
