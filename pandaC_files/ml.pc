@@ -1,0 +1,28 @@
+using pandaC
+using ml_trash
+
+def int main()
+    print("ML Trash Library Test")
+    Array<double> x_train
+    x_train.data = {1.0, 2.0, 3.0, 4.0, 5.0}
+
+    Array<double> y_train
+    y_train.data = {3.0, 5.0, 7.0, 9.0, 11.0}
+
+    LinearRegression model
+    print("Training model on " + x_train.len() + " samples...")
+    model.fit(x_train, y_train);
+
+    print("Model Slope: " + model.slope)
+    print("Model Intercept: " + model.intercept)
+
+    fl2 unknown = 10.0
+    fl2 prediction = model.predict_single(unknown)
+
+    print("Prediction for input " + unknown + ": " + prediction)
+    fl2 error = prediction - 21.0
+
+    if error * error < 0.001:
+        print("[PASS] Prediction is accurate.")
+    else:
+        print("[FAIL] Prediction is inaccurate.")

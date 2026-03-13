@@ -1,0 +1,4 @@
+using pandaC
+
+def int main():
+    print("Greetings to the world of PandaC!")

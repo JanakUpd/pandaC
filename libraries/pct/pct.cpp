@@ -1,11 +1,3 @@
-#include <unordered_map>
-#include <vector>
-#include <string>
-#include <variant>
-#include <iostream>
-#include <ranges>
-#include <iomanip>
-
 class StringPool {
     std::unordered_map<std::string, size_t> string_to_id;
     std::vector<std::string> id_to_string;

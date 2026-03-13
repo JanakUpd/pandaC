@@ -1,6 +1,9 @@
 using pandaC
-def int test(int a, int b):
-    return a + b
+
 def int main():
-    int result = test(5, 10)
-    print(int16(result))
+    int age = 25
+    int year = 2024
+    print("The year is " + year)
+    print(age + " is my age")
+    print("In " + year + " I am " + age + " years old")
+    print("Next year I will be " + (age + 1))
