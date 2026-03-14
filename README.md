@@ -101,7 +101,7 @@ def main()
 ```
 
 ## Libraries
-**You can develop a library for your needs in c++ - you need just a .cpp file with the code you are planning to use and specify cpp dependencies in config file! You can take PandaML or standard library pandaC as an example**
+**You can develop a library for your needs in c++ - you need just a .cpp file with the code you are planning to use and specify cpp dependencies in config file! You can take PandaML or standard library pandaC as an example.**
 **Also if you really need to add keywords crucial for your code, you can add it via config/default.conf**
 
 ## Contributing
