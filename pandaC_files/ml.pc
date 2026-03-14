@@ -2,7 +2,7 @@ using pandaC
 using PandaML
 
 def main()
-    print("ML Trash Library Test")
+    print("ML Library Test")
     Matr<fl2> x_train
     x_train.data = {{1.0}, {2.0}, {3.0}, {4.0}, {5.0}}
 

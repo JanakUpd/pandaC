@@ -233,6 +233,7 @@ int Compiler::run(std::string file, bool execute, bool log) {
             "Compilation finished successfully in " + (duration.count() == 0 ? "<1" : std::to_string(duration.count()))
             + " miliseconds.");
 
+    start_time = std::chrono::high_resolution_clock::now();
     if (execute) {
 #ifdef _WIN32
         FILE *pipe = _popen(outputFile.c_str(), "r");
@@ -249,6 +250,9 @@ int Compiler::run(std::string file, bool execute, bool log) {
             pclose(pipe);
 #endif
         }
+            duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::high_resolution_clock::now() - start_time);
+        Notifier::notifyInfo("Program executed in " + (duration.count() == 0 ? "<1" : std::to_string(duration.count())) + " miliseconds.");
     }
     return 0;
 }

@@ -1,0 +1,7 @@
+using pandaC
+
+def main():
+    int i = 0
+    while i < 1000000:
+        ++i
+    print("Loop finished")

@@ -52,7 +52,7 @@ struct Array {
     Var<size_t> len() const { return Var<size_t>(data.size()); }
 
     const T& operator [](size_t ind) const { return data[ind]; }
-    T& operator [](size_t ind) { return Var(data[ind]); }
+    T& operator [](size_t ind) { return Var<T>(data[ind]); }
     auto begin() { return data.begin(); }
     auto end() { return data.end(); }
     auto begin() const { return data.begin(); }

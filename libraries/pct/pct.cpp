@@ -1,3 +1,6 @@
+#include <array>
+#include <string>
+
 class StringPool {
     std::unordered_map<std::string, size_t> string_to_id;
     std::vector<std::string> id_to_string;
@@ -99,6 +102,10 @@ public:
 
         columns.emplace_back(name, t, std::move(values));
     }
+    template <typename T>
+    void add_column(std::vector<T>& values, std::string name = "") {
+        add_column(std::move(values), name);
+    }
 
     [[nodiscard]] std::pair<size_t, size_t> shape() const { return {n_rows, columns.size()}; }
 
@@ -120,10 +127,20 @@ public:
         if (it == columns.end()) throw std::runtime_error("Column not found: " + name);
         return std::ranges::distance(columns.begin(), it);
     }
-
     [[nodiscard]] const Column& get_column(const std::string& name) const {
         return columns[get_column_index(name)];
     }
+    [[nodiscard]] const std::vector<std::string>& get_col_str(const std::string name) const {
+        return std::get<std::vector<std::string>>(get_column(name).data);
+    }
+
+    [[nodiscard]] const std::vector<double>& get_col_fl2(const std::string name) const {
+        return std::get<std::vector<double>>(get_column(name).data);
+    }
+    [[nodiscard]] const std::vector<int64_t>& get_col_int64(const std::string name) const {
+        return std::get<std::vector<int64_t>>(get_column(name).data);
+    }
+
 
     [[nodiscard]] DataFrame select(const std::vector<std::string>& col_names) const {
         DataFrame df;
