@@ -11,12 +11,12 @@
 #include "../../include/compiler/codeconvertion.h"
 #include "../../include/notifier/notifier.h"
 
-int Compiler::countIndentation(const std::string &line) {
+int countIndentation(const std::string &line) {
     int count = 0;
-    for (auto it = line.begin(); it != line.end(); ++it) {
-        if (*it == ' ')
+    for (const char& item : line) {
+        if (item == ' ')
             ++count;
-        else if (*it == '\t')
+        else if (item == '\t')
             count += 3;
         else
             return count;
@@ -29,7 +29,7 @@ void ensureExists(const std::string& str) {
     std::filesystem::create_directory(file);
 }
 
-bool Compiler::isFileValid(const std::string &filePath) {
+bool isFileValid(const std::string &filePath) {
     if (filePath.length() < 4)
         return false;
     return filePath.rfind(".pc") != std::string::npos
@@ -48,26 +48,16 @@ std::vector<std::string> split(const std::string &s, char delimiter) {
         else if (first != std::string::npos)
             tokens.push_back(token.substr(first));
         else
-            tokens.push_back("");
+            tokens.emplace_back("");
     }
     return tokens;
 }
 
-int Compiler::run(std::string file, bool execute, bool log) {
-    auto start_time = std::chrono::high_resolution_clock::now();
-    if (!isFileValid(file)) {
-        if (log) Notifier::notifyError(ERROR_TYPE::FILE_NOT_FOUND);
-        return 1;
-    }
-    if (log) Notifier::notifyInfo("Compiling file: " + file);
-
-    CodeConvertion::cppLibrariesUsed.clear();
-    CodeConvertion::pandaCLibrariesUsed.clear();
+std::pair<std::vector<Compiler::Keyword>, std::vector<Compiler::TypeBinder>> readConf(const std::string& filePath) {
+    std::ifstream keywordsConfig(filePath);
 
     std::vector<Compiler::Keyword> keywords;
     std::vector<Compiler::TypeBinder> typeBinders;
-
-    std::ifstream keywordsConfig("../config/default.conf");
 
     if (keywordsConfig.is_open()) {
         std::string line;
@@ -83,7 +73,7 @@ int Compiler::run(std::string file, bool execute, bool log) {
                 parsingTypeBinders = true;
                 continue;
             }
-            if (line.find("}") != std::string::npos && line.find("{") == std::string::npos) {
+            if (line.find('}') != std::string::npos && line.find('{') == std::string::npos) {
                 parsingCommands = false;
                 parsingTypeBinders = false;
                 continue;
@@ -101,8 +91,8 @@ int Compiler::run(std::string file, bool execute, bool log) {
             if (parsingCommands) {
                 if (parts.size() >= 3) {
                     std::string name = parts[0];
-                    std::string patternStr = parts[1];
-                    std::string funcStr = parts[2];
+                    const std::string& patternStr = parts[1];
+                    const std::string& funcStr = parts[2];
                     size_t flags = 0;
                     if (parts.size() >= 4) { try { flags = std::stoul(parts[3]); } catch(...) { flags = 0; } }
 
@@ -112,12 +102,12 @@ int Compiler::run(std::string file, bool execute, bool log) {
                     bool found = false;
                     for (auto &existing : keywords) {
                         if (existing.name == name) {
-                            existing.maps.push_back(patternStr + "@@@" + funcStr);
+                            existing.maps.push_back(patternStr + "@" + funcStr);
                             found = true;
                             break;
                         }
                     }
-                    if (!found) keywords.emplace_back(name, std::vector<std::string>{patternStr + "@@@" + funcStr}, flags);
+                    if (!found) keywords.emplace_back(name, std::vector<std::string>{patternStr + "@" + funcStr}, flags);
                 }
             }
             else if (parsingTypeBinders) {
@@ -136,6 +126,20 @@ int Compiler::run(std::string file, bool execute, bool log) {
     }
     keywords.emplace_back("", std::vector<std::string>{}, 0);
     typeBinders.emplace_back("", "", Compiler::VarType::None, 0);
+    return std::make_pair(keywords, typeBinders);
+}
+
+int Compiler::run(const std::string& file, bool execute, bool log) {
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    if (!isFileValid(file)) {
+        if (log) Notifier::notifyError(ERROR_TYPE::FILE_NOT_FOUND);
+        return 1;
+    }
+
+    if (log) Notifier::notifyInfo("Compiling file: " + file);
+
+    auto [keywords, typeBinders] = readConf("../config/default.conf");
 
     std::ifstream in(file);
     if (!in) {
@@ -145,11 +149,11 @@ int Compiler::run(std::string file, bool execute, bool log) {
     std::string mainCode = CodeConvertion::convert(in, keywords, typeBinders);
     in.close();
 
-    std::string pandaClibraries = "";
-
+    std::string pandaClibraries;
+//Todo: reconsider library import algorithm
     std::vector<std::string> sortedLibs;
-    if (CodeConvertion::pandaCLibrariesUsed.count("pandaC")) {
-        sortedLibs.push_back("pandaC");
+    if (CodeConvertion::pandaCLibrariesUsed.contains("pandaC")) {
+        sortedLibs.emplace_back("pandaC");
     }
     for (const auto &item : CodeConvertion::pandaCLibrariesUsed) {
         if (item != "pandaC") {
@@ -162,9 +166,8 @@ int Compiler::run(std::string file, bool execute, bool log) {
         std::filesystem::path cppPath = libFolder / (item + ".cpp");
         std::filesystem::path confPath = libFolder / (item + ".conf");
 
-        if (!std::filesystem::exists(cppPath)) {
+        if (!std::filesystem::exists(cppPath))
             cppPath = "../libraries/" + item + ".cpp";
-        }
 
         pandaClibraries += "//START OF BLOCK: " + item + "\n\n";
         std::ifstream inLib(cppPath);
@@ -173,9 +176,8 @@ int Compiler::run(std::string file, bool execute, bool log) {
             while (std::getline(inLib, libLine))
                 pandaClibraries += libLine + "\n";
             inLib.close();
-        } else {
-            if (log) Notifier::notifyInfo("Warning: Could not find source for library " + item);
         }
+        else if (log) Notifier::notifyInfo("Warning: Could not find source for library " + item);
         pandaClibraries += "//END OF BLOCK: " + item + "\n\n";
 
         if (std::filesystem::exists(confPath)) {
@@ -188,7 +190,7 @@ int Compiler::run(std::string file, bool execute, bool log) {
                     continue;
                 }
                 if (parsingCppLibs) {
-                    if (confLine.find("}") != std::string::npos) {
+                    if (confLine.find('}') != std::string::npos) {
                         parsingCppLibs = false;
                         continue;
                     }

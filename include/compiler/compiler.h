@@ -62,10 +62,8 @@ public:
         static std::string processFor(std::vector<std::string>* params, std::vector<TypeBinder>* typeBinders);
         static std::string processPrint(std::vector<std::string>* params, std::vector<TypeBinder>* typeBinders);
     };
-    int countIndentation(const std::string& line);
-    bool isFileValid(const std::string& filePath);
 public:
-    int run(std::string file, bool execute = false, bool log = false);
+    static int run(const std::string& file, bool execute = false, bool log = false);
 };
 
 

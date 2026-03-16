@@ -27,11 +27,10 @@ bool containsSpecifier(int argc, char** argv, const std::string& specifier)
 }
 
 int main(int argc, char** argv) {
-    Compiler compiler;
     std::string filePath;
     if (containsSpecifier(argc, argv, "-f"))
         filePath = findSpecifier(argc, argv, "-f=");
     else
         filePath = "main.pc";
-    return compiler.run(filePath, !containsSpecifier(argc, argv, "--no-execution"), containsSpecifier(argc, argv, "--debug"));
+    return Compiler::run(filePath, !containsSpecifier(argc, argv, "--no-execution"), containsSpecifier(argc, argv, "--debug"));
 }

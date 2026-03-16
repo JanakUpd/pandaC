@@ -1,4 +1,3 @@
-#include <vector>
 template<typename T> struct Var;
 
 template<typename T>
@@ -177,4 +176,8 @@ std::vector<Var<size_t>> range(long long start, long long end, long long step = 
 
 std::vector<Var<size_t>> range(long long end) {
     return range(0, end, 1);
+}
+
+void print(const std::string& message, const std::string& end = "\n") {
+    std::cout << message << end;
 }

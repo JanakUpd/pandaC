@@ -9,7 +9,7 @@
 std::set<std::string> CodeConvertion::cppLibrariesUsed;
 std::set<std::string> CodeConvertion::pandaCLibrariesUsed;
 
-bool matchPattern(const std::string &line, const std::string &pattern, std::vector<std::string> &extractedParams) {
+bool CodeConvertion::matchPattern(const std::string &line, const std::string &pattern, std::vector<std::string> &extractedParams) {
     size_t l = 0;
     size_t p = 0;
     extractedParams.clear();
@@ -82,14 +82,14 @@ std::vector<std::string> CodeConvertion::parseArguments(const std::string &argsS
     std::vector<std::string> params;
 
     std::string buffer;
-    bool inBrackets = false;
+    size_t depthBrackets = 0;
     for (char c: argsStr) {
-        if (c == ',' && !inBrackets) {
+        if (c == ',' && depthBrackets != 0) {
             params.push_back(buffer);
             buffer.clear();
         } else {
-            if (c == '(') inBrackets = true;
-            if (c == ')') inBrackets = false;
+            if (c == '(') ++depthBrackets;
+            if (c == ')') --depthBrackets;
             buffer += c;
         }
     }
@@ -99,16 +99,14 @@ std::vector<std::string> CodeConvertion::parseArguments(const std::string &argsS
 
 std::pair<size_t, std::string> CodeConvertion::parseLine(const std::string &line) {
     size_t indentCount = 0;
-    size_t i = 0;
-    while (i < line.size()) {
-        if (line[i] == ' ') {
+    size_t i;
+    for (i = 0; i < line.size(); ++i)
+        if (line[i] == ' ')
             indentCount += 1;
-            i++;
-        } else if (line[i] == '\t') {
+        else if (line[i] == '\t')
             indentCount += 4;
-            i++;
-        } else break;
-    }
+        else
+            break;
     std::string trimmed = line.substr(i);
     while (!trimmed.empty() && std::isspace(trimmed.back())) trimmed.pop_back();
     return {indentCount, trimmed};
@@ -116,9 +114,12 @@ std::pair<size_t, std::string> CodeConvertion::parseLine(const std::string &line
 
 std::string CodeConvertion::adjustBraces(size_t currentIndent, size_t newIndent) {
     std::string result{};
-    for (size_t i = currentIndent; i > newIndent; i -= 4) {
-        result += CodeConvertion::createIndentation(i - 4) + "}\n";
-    }
+    if (currentIndent > newIndent)
+        for (size_t i = currentIndent; i > newIndent; i -= 4)
+            result += CodeConvertion::createIndentation(i - 4) + "}\n";
+    else
+        for (size_t i = currentIndent; i < newIndent; i += 4)
+            result += CodeConvertion::createIndentation(i) + "{\n";
     return result;
 }
 
@@ -129,17 +130,15 @@ std::string CodeConvertion::createIndentation(size_t ind) {
     return res;
 }
 
-const Compiler::Keyword *CodeConvertion::findKeyword(const std::string &line,
+const Compiler::Keyword* CodeConvertion::findKeyword(const std::string &line,
                                                      const std::vector<Compiler::Keyword> &keywords) {
-    for (const auto &item: keywords) {
-        if (!item.name.empty() && line.starts_with(item.name)) {
+    for (const auto &item: keywords)
+        if (!item.name.empty() && line.starts_with(item.name))
             return &item;
-        }
-    }
     return nullptr;
 }
 
-const Compiler::TypeBinder &CodeConvertion::findTypeBinder(std::string &s,
+const Compiler::TypeBinder &CodeConvertion::findTypeBinder(const std::string& s,
                                                            const std::vector<Compiler::TypeBinder> &typeBinders) {
     for (auto &item: typeBinders)
         if (s.size() >= item.pandacName.size() && s.substr(s.size() - item.pandacName.size(), item.pandacName.size()) ==
@@ -180,50 +179,43 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
         auto [lineIndent, command] = parseLine(line);
         if (command.empty()) continue;
 
-        if (lineIndent < currentIndent)
+        if (lineIndent != currentIndent)
             finalCppCode += adjustBraces(currentIndent, lineIndent);
-
+        //todo: make this code block fit into processDef function
         if (command.starts_with("def ")) {
             std::string sub = command.substr(4);
-            std::vector<std::string> parts;
-            std::stringstream ss(sub);
-            std::string buf;
-            while (getline(ss, buf, '(')) {
-                parts.push_back(buf);
-                break;
-            }
-            std::vector<std::string> defParams = parseArguments(sub, 0);
+
             std::vector<std::string> tokens;
             std::string temp;
-            for (char c: sub) {
+            for (char c : sub) {
                 if (c == '(') break;
                 if (c == ' ') {
                     if (!temp.empty()) tokens.push_back(temp);
                     temp.clear();
-                } else temp += c;
+                }
+                else temp += c;
             }
             if (!temp.empty()) tokens.push_back(temp);
             size_t startArgs = sub.find('(');
             size_t endArgs = sub.rfind(')');
-            if (startArgs != std::string::npos && endArgs != std::string::npos) {
+            //Todo: make params of def be converted as well
+            if (startArgs != std::string::npos && endArgs != std::string::npos)
                 tokens.push_back(sub.substr(startArgs + 1, endArgs - startArgs - 1));
-            }
 
             finalCppCode += createIndentation(lineIndent);
             finalCppCode += processDef(&tokens, &typeBinders);
         }
         else if (command.starts_with("using ")) {
-            std::vector<std::string> params{command.substr(6)};
-            pandaCLibrariesUsed.emplace(params[0]);
+            pandaCLibrariesUsed.emplace(command.substr(6));
         }
         else {
             bool matchedKeyword = false;
-            auto *keyword = findKeyword(command, keywords);
-            if (keyword) {
+            auto keyword = findKeyword(command, keywords);
+            if (keyword != nullptr) {
                 for (const auto &mapEntry: keyword->maps) {
-                    size_t sep = mapEntry.find("@");
+                    size_t sep = mapEntry.find('@');
                     if (sep == std::string::npos) continue;
-
+                    //Todo: check highly suspicious pattern identification(maybe use keyword instead)
                     std::string pattern = mapEntry.substr(0, sep);
                     std::string codeTemplate = mapEntry.substr(sep + 3);
                     std::vector<std::string> capturedArgs;
@@ -255,9 +247,6 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
     finalCppCode += adjustBraces(currentIndent, 0);
     return finalCppCode;
 }
-
-static std::set<std::string> cppLibrariesUsed;
-static std::set<std::string> pandaCLibrariesUsed;
 
 std::string CodeConvertion::translateArgs(const std::string &rawArgs, const std::vector<Compiler::TypeBinder> *typeBinders) {
     if (rawArgs.empty()) return "";
@@ -308,9 +297,9 @@ std::string CodeConvertion::translateArgs(const std::string &rawArgs, const std:
     return result;
 }
 
-int CodeConvertion::countArgs(const std::string &str) {
-    int count = 0;
-    int shift = 0;
+size_t CodeConvertion::countArgs(const std::string &str) {
+    size_t count = 0;
+    size_t shift = 0;
     while (shift < str.size())
         if (str.find('[', shift) != std::string::npos) {
             shift = str.find(']', shift) + 1;
@@ -320,15 +309,15 @@ int CodeConvertion::countArgs(const std::string &str) {
     return count;
 }
 
-std::string CodeConvertion::selectMap(std::vector<std::string> &params, const std::vector<std::string> &maps) {
-    int count = params.size();
+std::string CodeConvertion::selectMap(const std::vector<std::string> &params, const std::vector<std::string> &maps) {
+    size_t count = params.size();
     for (auto &item: maps)
         if (countArgs(item) == count)
             return item;
     return "";
 }
 
-std::string CodeConvertion::convertCommand(std::vector<std::string> &params, const std::vector<std::string> &maps) {
+std::string CodeConvertion::convertCommand(const std::vector<std::string> &params, const std::vector<std::string> &maps) {
     std::string result = selectMap(params, maps);
     if (result.empty()) return "";
 
@@ -350,12 +339,12 @@ std::string CodeConvertion::processDef(std::vector<std::string> *params,
                                        std::vector<Compiler::TypeBinder> *typeBinders) {
     if (params->empty()) return "";
     for (const auto &p: *params) {
-        if (p == "main") return "int main() {\n";
+        if (p == "main") return "int main()\n";
     }
 
     std::string returnType = "void";
-    std::string funcName = "";
-    std::string rawArgs = "";
+    std::string funcName;
+    std::string rawArgs;
 
     if (params->size() == 1) {
         funcName = (*params)[0];
@@ -385,5 +374,5 @@ std::string CodeConvertion::processDef(std::vector<std::string> *params,
         rawArgs = (*params)[2];
     }
     std::string translatedArgs = translateArgs(rawArgs, typeBinders);
-    return returnType + " " + funcName + "(" + translatedArgs + ") {\n";
+    return returnType + " " + funcName + "(" + translatedArgs + ")\n";
 }
