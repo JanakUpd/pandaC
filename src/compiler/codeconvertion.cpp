@@ -168,8 +168,7 @@ std::string CodeConvertion::convertTypes(std::string command, const std::vector<
     return command;
 }
 
-std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compiler::Keyword> &keywords,
-                                    std::vector<Compiler::TypeBinder> &typeBinders) {
+std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compiler::Keyword> &keywords, std::vector<Compiler::TypeBinder> &typeBinders) {
     std::string finalCppCode;
     std::string line;
     size_t currentIndent = 0;
@@ -181,29 +180,10 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
 
         if (lineIndent != currentIndent)
             finalCppCode += adjustBraces(currentIndent, lineIndent);
-        //todo: make this code block fit into processDef function
+
         if (command.starts_with("def ")) {
-            std::string sub = command.substr(4);
-
-            std::vector<std::string> tokens;
-            std::string temp;
-            for (char c : sub) {
-                if (c == '(') break;
-                if (c == ' ') {
-                    if (!temp.empty()) tokens.push_back(temp);
-                    temp.clear();
-                }
-                else temp += c;
-            }
-            if (!temp.empty()) tokens.push_back(temp);
-            size_t startArgs = sub.find('(');
-            size_t endArgs = sub.rfind(')');
-            //Todo: make params of def be converted as well
-            if (startArgs != std::string::npos && endArgs != std::string::npos)
-                tokens.push_back(sub.substr(startArgs + 1, endArgs - startArgs - 1));
-
             finalCppCode += createIndentation(lineIndent);
-            finalCppCode += processDef(&tokens, &typeBinders);
+            finalCppCode += processDef(command, typeBinders);
         }
         else if (command.starts_with("using ")) {
             pandaCLibrariesUsed.emplace(command.substr(6));
@@ -213,15 +193,10 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
             auto keyword = findKeyword(command, keywords);
             if (keyword != nullptr) {
                 for (const auto &mapEntry: keyword->maps) {
-                    size_t sep = mapEntry.find('@');
-                    if (sep == std::string::npos) continue;
-                    //Todo: check highly suspicious pattern identification(maybe use keyword instead)
-                    std::string pattern = mapEntry.substr(0, sep);
-                    std::string codeTemplate = mapEntry.substr(sep + 3);
                     std::vector<std::string> capturedArgs;
 
-                    if (matchPattern(command, pattern, capturedArgs)) {
-                        std::string result = codeTemplate;
+                    if (matchPattern(command, mapEntry.first, capturedArgs)) {
+                        std::string result = mapEntry.second;
                         for (size_t i = 0; i < capturedArgs.size(); ++i) {
                             std::string pl = "[" + std::to_string(i) + "]";
                             size_t pos = 0;
@@ -335,44 +310,60 @@ std::string CodeConvertion::convertCommand(const std::vector<std::string> &param
     return result;
 }
 
-std::string CodeConvertion::processDef(std::vector<std::string> *params,
-                                       std::vector<Compiler::TypeBinder> *typeBinders) {
-    if (params->empty()) return "";
-    for (const auto &p: *params) {
-        if (p == "main") return "int main()\n";
+std::string CodeConvertion::processDef(const std::string& line, const std::vector<Compiler::TypeBinder>& typeBinders) {
+    std::vector<std::string> params;
+    std::string sub = line.substr(4);
+    std::string temp;
+    for (char c : sub) {
+        if (c == '(') break;
+        if (c == ' ') {
+            if (!temp.empty()) params.push_back(temp);
+            temp.clear();
+        }
+        else temp += c;
     }
+    if (!temp.empty()) params.push_back(temp);
+    size_t startArgs = sub.find('(');
+    size_t endArgs = sub.rfind(')');
+    //Todo: make params of def be converted as well
+    if (startArgs != std::string::npos && endArgs != std::string::npos)
+        params.push_back(sub.substr(startArgs + 1, endArgs - startArgs - 1));
+
+    if (params.empty()) return "";
+    for (const auto &p: params)
+        if (p == "main") return "int main()\n";
 
     std::string returnType = "void";
     std::string funcName;
     std::string rawArgs;
 
-    if (params->size() == 1) {
-        funcName = (*params)[0];
-    } else if (params->size() == 2) {
+    if (params.size() == 1) {
+        funcName = (params)[0];
+    } else if (params.size() == 2) {
         bool hasType = false;
-        for (const auto &item: *typeBinders) {
-            if ((*params)[0] == item.pandacName) {
+        for (const auto &item: typeBinders) {
+            if (params[0] == item.pandacName) {
                 returnType = item.cppName;
                 hasType = true;
                 break;
             }
         }
         if (hasType)
-            funcName = (*params)[1];
+            funcName = params[1];
         else {
-            funcName = (*params)[0];
-            rawArgs = (*params)[1];
+            funcName = params[0];
+            rawArgs = params[1];
         }
-    } else if (params->size() >= 3) {
-        for (const auto &item: *typeBinders) {
-            if ((*params)[0] == item.pandacName) {
+    } else if (params.size() >= 3) {
+        for (const auto &item: typeBinders) {
+            if (params[0] == item.pandacName) {
                 returnType = item.cppName;
                 break;
             }
         }
-        funcName = (*params)[1];
-        rawArgs = (*params)[2];
+        funcName = params[1];
+        rawArgs = params[2];
     }
-    std::string translatedArgs = translateArgs(rawArgs, typeBinders);
+    std::string translatedArgs = translateArgs(rawArgs, &typeBinders);
     return returnType + " " + funcName + "(" + translatedArgs + ")\n";
 }
