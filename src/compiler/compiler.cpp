@@ -102,12 +102,12 @@ std::pair<std::vector<Compiler::Keyword>, std::vector<Compiler::TypeBinder>> rea
                     bool found = false;
                     for (auto &existing : keywords) {
                         if (existing.name == name) {
-                            existing.maps.push_back(patternStr + "@" + funcStr);
+                            existing.maps.emplace_back(patternStr, funcStr);
                             found = true;
                             break;
                         }
                     }
-                    if (!found) keywords.emplace_back(name, std::vector<std::string>{patternStr + "@" + funcStr}, flags);
+                    if (!found) keywords.emplace_back(name, std::vector{std::make_pair(patternStr, funcStr)}, flags);
                 }
             }
             else if (parsingTypeBinders) {
@@ -124,7 +124,6 @@ std::pair<std::vector<Compiler::Keyword>, std::vector<Compiler::TypeBinder>> rea
         }
         keywordsConfig.close();
     }
-    keywords.emplace_back("", std::vector<std::string>{}, 0);
     typeBinders.emplace_back("", "", Compiler::VarType::None, 0);
     return std::make_pair(keywords, typeBinders);
 }

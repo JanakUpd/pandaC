@@ -3,6 +3,6 @@ using pandaC
 def int main():
     str name = input("Enter your name: ")
     print("Hello, " + name)
-    print("Enter a number:", ' ')
+    print("Enter a number:", " ")
     int num = int(input())
     print("You entered: " + num)

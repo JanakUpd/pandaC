@@ -29,7 +29,7 @@ public:
     static size_t countArgs(const std::string& str);
     static std::string selectMap(const std::vector<std::string>& params, const std::vector<std::string>& maps);
     static std::string convertCommand(const std::vector<std::string>& args, const std::vector<std::string>& maps);
-    static std::string processDef(std::vector<std::string>* params, std::vector<Compiler::TypeBinder>* typeBinders);
+    static std::string processDef(const std::string& line, const std::vector<Compiler::TypeBinder>& typeBinders);
 };
 
 
