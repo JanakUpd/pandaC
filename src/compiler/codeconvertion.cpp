@@ -9,6 +9,56 @@
 std::set<std::string> CodeConvertion::cppLibrariesUsed;
 std::set<std::string> CodeConvertion::pandaCLibrariesUsed;
 
+int CodeConvertion::parseIndex(const std::string& key) {
+    try {
+        if (isdigit(key[0])) return std::stoi(key);
+    } catch (...) {
+        return -1;
+    }
+    return -1;
+}
+
+std::string CodeConvertion::extractUntilDelimiter(const std::string& line, size_t& l, char delimiter) {
+    size_t startL = l;
+    int bracketDepth = 0;
+    bool inQuote = false;
+    char quoteChar = 0;
+
+    while (l < line.length()) {
+        char c = line[l];
+        if (inQuote) {
+            if (c == '\\') l++;
+            else if (c == quoteChar) inQuote = false;
+        } else {
+            if (bracketDepth == 0 && (c == delimiter || (c == ',' && delimiter != ',')))
+                break;
+            if (c == '(' || c == '{' || c == '[')
+                bracketDepth++;
+            else if (c == ')' || c == '}' || c == ']') {
+                if (bracketDepth > 0) bracketDepth--;
+            } else if (c == '"' || c == '\'') {
+                inQuote = true;
+                quoteChar = c;
+            }
+        }
+        l++;
+    }
+
+    return line.substr(startL, l - startL);
+}
+
+void CodeConvertion::storeCapturedParam(std::vector<std::string>& extractedParams, int index, const std::string& captured) {
+    if (index >= 0) {
+        if (extractedParams.size() <= index)
+            extractedParams.resize(index + 1);
+        extractedParams[index] = captured;
+    }
+}
+
+
+
+// Matches a line against a pattern and extracts parameters into `extractedParams`.
+// Returns true if the match is successful, false otherwise.
 bool CodeConvertion::matchPattern(const std::string &line, const std::string &pattern, std::vector<std::string> &extractedParams) {
     size_t l = 0;
     size_t p = 0;
@@ -20,53 +70,13 @@ bool CodeConvertion::matchPattern(const std::string &line, const std::string &pa
             if (close == std::string::npos) return false;
 
             std::string key = pattern.substr(p + 1, close - p - 1);
-            int index = -1;
-            try {
-                if (isdigit(key[0])) index = std::stoi(key);
-            } catch (...) { index = -1; }
-
+            int index = parseIndex(key);
             p = close + 1;
 
             char delimiter = (p < pattern.length()) ? pattern[p] : '\0';
-
-            size_t startL = l;
-            int bracketDepth = 0;
-            bool inQuote = false;
-            char quoteChar = 0;
-
-            while (l < line.length()) {
-                char c = line[l];
-                if (inQuote) {
-                    if (c == '\\') l++;
-                    else if (c == quoteChar) inQuote = false;
-                }
-                else {
-                    if (bracketDepth == 0 && (c == delimiter || (c == ',' && delimiter != ',')))
-                        break;
-                    if (c == '(' || c == '{' || c == '[')
-                        bracketDepth++;
-                    else if (c == ')' || c == '}' || c == ']') {
-                        if (bracketDepth > 0)
-                            bracketDepth--;
-                    }
-                    else if (c == '"' || c == '\'') {
-                        inQuote = true;
-                        quoteChar = c;
-                    }
-                }
-                l++;
-            }
-
-            std::string captured = line.substr(startL, l - startL);
-
-            if (delimiter != '\0')
-                if (!(l < line.length() && line[l] == delimiter))
-                    return false;
-
-            if (index >= 0) {
-                if (extractedParams.size() <= index) extractedParams.resize(index + 1);
-                extractedParams[index] = captured;
-            }
+            std::string captured = extractUntilDelimiter(line, l, delimiter);
+            if (index >= 0)
+                storeCapturedParam(extractedParams, index, captured);
         }
         else {
             if (l >= line.length() || line[l] != pattern[p])
@@ -77,6 +87,7 @@ bool CodeConvertion::matchPattern(const std::string &line, const std::string &pa
     }
     return l == line.length();
 }
+
 
 std::vector<std::string> CodeConvertion::parseArguments(const std::string &argsStr, size_t paramFlags) {
     std::vector<std::string> params;
@@ -147,7 +158,8 @@ const Compiler::TypeBinder &CodeConvertion::findTypeBinder(const std::string& s,
     return typeBinders.back();
 }
 
-std::string CodeConvertion::convertTypes(std::string command, const std::vector<Compiler::TypeBinder> &typeBinders) {
+std::string CodeConvertion::convertTypes(std::string_view command, const std::vector<Compiler::TypeBinder> &typeBinders) {
+    std::string result(command);
     for (const auto &item: typeBinders) {
         if (item.pandacName.empty()) continue;
         size_t pos = 0;
@@ -158,14 +170,14 @@ std::string CodeConvertion::convertTypes(std::string command, const std::vector<
                                  pos + item.pandacName.size()] != '_'));
 
             if (leftOk && rightOk) {
-                command.replace(pos, item.pandacName.size(), item.cppName);
+                result.replace(pos, item.pandacName.size(), item.cppName);
                 pos += item.cppName.size();
             } else {
                 pos += item.pandacName.size();
             }
         }
     }
-    return command;
+    return result;
 }
 
 std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compiler::Keyword> &keywords, std::vector<Compiler::TypeBinder> &typeBinders) {
@@ -339,7 +351,8 @@ std::string CodeConvertion::processDef(const std::string& line, const std::vecto
 
     if (params.size() == 1) {
         funcName = (params)[0];
-    } else if (params.size() == 2) {
+    }
+    else if (params.size() == 2) {
         bool hasType = false;
         for (const auto &item: typeBinders) {
             if (params[0] == item.pandacName) {
@@ -354,7 +367,8 @@ std::string CodeConvertion::processDef(const std::string& line, const std::vecto
             funcName = params[0];
             rawArgs = params[1];
         }
-    } else if (params.size() >= 3) {
+    }
+    else if (params.size() >= 3) {
         for (const auto &item: typeBinders) {
             if (params[0] == item.pandacName) {
                 returnType = item.cppName;
