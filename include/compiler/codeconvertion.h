@@ -24,7 +24,7 @@ public:
     static std::string convertTypes(std::string_view command, const std::vector<Compiler::TypeBinder> &typeBinders);
 
 public:
-    static std::string convert(std::ifstream& in, const std::vector<Compiler::Keyword>& keywords, std::vector<Compiler::TypeBinder>& typeBinders);
+    static std::string convert(std::istream& in, const std::vector<Compiler::Keyword>& keywords, std::vector<Compiler::TypeBinder>& typeBinders);
     static std::set<std::string> cppLibrariesUsed;
     static std::set<std::string> pandaCLibrariesUsed;
     static std::string translateArgs(const std::string& rawArgs, const std::vector<Compiler::TypeBinder>* typeBinders);

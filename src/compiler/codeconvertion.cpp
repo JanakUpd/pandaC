@@ -1,6 +1,5 @@
 #include "codeconvertion.h"
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
 #include <map>
@@ -12,7 +11,8 @@ std::set<std::string> CodeConvertion::pandaCLibrariesUsed;
 int CodeConvertion::parseIndex(const std::string& key) {
     try {
         if (isdigit(key[0])) return std::stoi(key);
-    } catch (...) {
+    }
+    catch (...) {
         return -1;
     }
     return -1;
@@ -29,14 +29,17 @@ std::string CodeConvertion::extractUntilDelimiter(const std::string& line, size_
         if (inQuote) {
             if (c == '\\') l++;
             else if (c == quoteChar) inQuote = false;
-        } else {
+        }
+        else {
             if (bracketDepth == 0 && (c == delimiter || (c == ',' && delimiter != ',')))
                 break;
             if (c == '(' || c == '{' || c == '[')
                 bracketDepth++;
             else if (c == ')' || c == '}' || c == ']') {
-                if (bracketDepth > 0) bracketDepth--;
-            } else if (c == '"' || c == '\'') {
+                if (bracketDepth > 0)
+                    bracketDepth--;
+            }
+            else if (c == '"' || c == '\'') {
                 inQuote = true;
                 quoteChar = c;
             }
@@ -98,7 +101,8 @@ std::vector<std::string> CodeConvertion::parseArguments(const std::string &argsS
         if (c == ',' && depthBrackets != 0) {
             params.push_back(buffer);
             buffer.clear();
-        } else {
+        }
+        else {
             if (c == '(') ++depthBrackets;
             if (c == ')') --depthBrackets;
             buffer += c;
@@ -172,7 +176,8 @@ std::string CodeConvertion::convertTypes(std::string_view command, const std::ve
             if (leftOk && rightOk) {
                 result.replace(pos, item.pandacName.size(), item.cppName);
                 pos += item.cppName.size();
-            } else {
+            }
+            else {
                 pos += item.pandacName.size();
             }
         }
@@ -180,7 +185,7 @@ std::string CodeConvertion::convertTypes(std::string_view command, const std::ve
     return result;
 }
 
-std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compiler::Keyword> &keywords, std::vector<Compiler::TypeBinder> &typeBinders) {
+std::string CodeConvertion::convert(std::istream& in, const std::vector<Compiler::Keyword> &keywords, std::vector<Compiler::TypeBinder> &typeBinders) {
     std::string finalCppCode;
     std::string line;
     size_t currentIndent = 0;
@@ -197,9 +202,8 @@ std::string CodeConvertion::convert(std::ifstream &in, const std::vector<Compile
             finalCppCode += createIndentation(lineIndent);
             finalCppCode += processDef(command, typeBinders);
         }
-        else if (command.starts_with("using ")) {
+        else if (command.starts_with("using "))
             pandaCLibrariesUsed.emplace(command.substr(6));
-        }
         else {
             bool matchedKeyword = false;
             auto keyword = findKeyword(command, keywords);
@@ -245,7 +249,8 @@ std::string CodeConvertion::translateArgs(const std::string &rawArgs, const std:
         if (c == ',' && depth == 0) {
             args.push_back(currentArg);
             currentArg.clear();
-        } else {
+        }
+        else {
             if (c == '<' || c == '(') depth++;
             if (c == '>' || c == ')') depth--;
             currentArg += c;
