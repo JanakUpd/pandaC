@@ -47,18 +47,18 @@ int main(int argc, char** argv) {
     uint64_t duration;
     timer.start();
     std::stringstream ss = Preprocessor::run(filePath, log);
-    duration = timer.getMiliseconds();
+    duration = timer.getMicroseconds();
     if (log)
-        Notifier::notifyInfo("Preprocessing finished successfully in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
+        Notifier::notifyInfo("Preprocessing finished successfully in " + (duration == 0 ? "<1" : std::to_string(duration)) + " microseconds.");
 
     //Compiling: converting pandac code into c++
     if (log)
         Notifier::notifyInfo("Compiling...");
     timer.start();
     std::string cppTranslatedCode = Compiler::run(ss, log);
-    duration = timer.getMiliseconds();
+    duration = timer.getMicroseconds();
     if (log)
-        Notifier::notifyInfo("Compilation finished successfully in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
+        Notifier::notifyInfo("Compilation finished successfully in " + (duration == 0 ? "<1" : std::to_string(duration)) + " microseconds.");
 
     //Building: building the cpp code into executable via gcc
     timer.start();

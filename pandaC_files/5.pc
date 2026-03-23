@@ -1,6 +1,7 @@
 using pandaC
 
 def int main():
+    #For loops
     for i in range(10):
         print("Count: " + i)
 
@@ -9,7 +10,7 @@ def int main():
 
     for k in range(1, 10, 2):
         print("Odd: " + k)
-
+    #while loop
     int x = 0
     while x < 3:
         print("While: " + x)

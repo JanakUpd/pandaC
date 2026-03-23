@@ -16,7 +16,6 @@ TEST_F(MatchPatternTest, BasicExactMatch) {
 }
 
 TEST_F(MatchPatternTest, SingleParameterCapture) {
-    // [0] should capture everything between ( and )
     std::string line = "print(\"Hello World\")";
     std::string pattern = "print([0])";
 
@@ -36,7 +35,6 @@ TEST_F(MatchPatternTest, MultipleParameters) {
 }
 
 TEST_F(MatchPatternTest, NestedParentheses) {
-    // Should correctly handle nested brackets and not stop early
     std::string line = "calc((a + b) * c)";
     std::string pattern = "calc([0])";
 
@@ -46,7 +44,6 @@ TEST_F(MatchPatternTest, NestedParentheses) {
 }
 
 TEST_F(MatchPatternTest, DelimiterInsideQuotes) {
-    // The comma inside the string should be ignored by the parser
     std::string line = "log(\"Error, unexpected\", true)";
     std::string pattern = "log([0], [1])";
 
@@ -57,7 +54,6 @@ TEST_F(MatchPatternTest, DelimiterInsideQuotes) {
 }
 
 TEST_F(MatchPatternTest, ReorderedIndices) {
-    // Pattern uses [1] then [0], capturing in reverse order
     std::string line = "swap(first, second)";
     std::string pattern = "swap([1], [0])";
 
