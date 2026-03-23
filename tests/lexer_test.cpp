@@ -9,7 +9,7 @@ void run_tests() {
     auto run_test = [&](const std::string& name, const std::string& input, const std::string& expected) {
         try {
             Expression ast = lexer.fromString(input);
-            std::string result = Lexer::toString(ast);
+            std::string result = Lexer::astToString(ast);
             if (result == expected) {
                 std::cout << "[PASS] " << name << ": " << input << " -> " << result << std::endl;
                 tests_passed++;
@@ -63,6 +63,34 @@ void run_tests() {
     run_fail_test("Empty Parens", "()");
     run_fail_test("Missing Operand", "a + * b");
     run_fail_test("Trailing Operator", "a + b +");
+
+    run_test("Func No Args",
+             "print()",
+             "(call print)");
+    run_test("Func One Arg",
+             "sin(x)",
+             "(call sin x)");
+    run_test("Func Multiple Args",
+             "min(a, b, c)",
+             "(call min a b c)");
+    run_test("Func Math Arg",
+             "sin(a + b * c)",
+             "(call sin (+ a (* b c)))");
+    run_test("Math with Func",
+             "a + sin(b) * c",
+             "(+ a (* (call sin b) c))");
+    run_test("Nested Funcs",
+             "print(sin(max(a, b)))",
+             "(call print (call sin (call max a b)))");
+    run_test("Combo Func and Math",
+             "-math.sqrt(a ** 2 + b ** 2)",
+             "(- (call math.sqrt (+ (** a 2) (** b 2))))");
+
+    run_fail_test("Func Missing Paren", "sin(a");
+    run_fail_test("Func Extra Comma", "sin(a,)");
+    run_fail_test("Func Invalid Name", "(a+b)(c)");
+
+
 }
 
 

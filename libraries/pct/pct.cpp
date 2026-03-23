@@ -217,19 +217,19 @@ public:
         Column new_col(name, DType::Int, std::move(ids));
         columns.insert(columns.begin(), std::move(new_col));
     }
-    #define NUMERIC_VISITOR(COL_NAME, INIT_VAL, OP) \
-        const Column& col = get_column(COL_NAME); \
-        return std::visit([&](auto&& arg) -> double { \
-            using T = std::decay_t<decltype(arg)>; \
-            if constexpr (std::is_arithmetic_v<typename T::value_type>) { \
-                double res = INIT_VAL; \
-                for (size_t i = 0; i < arg.size(); ++i) { \
-                    if (col.validity[i]) res = OP; \
-                } \
-                return res; \
-            } \
-            throw std::runtime_error("Numeric column required"); \
-        }, col.data);
+#define NUMERIC_VISITOR(COL_NAME, INIT_VAL, OP) \
+const Column& col = get_column(COL_NAME); \
+return std::visit([&](auto&& arg) -> double { \
+using T = std::decay_t<decltype(arg)>; \
+if constexpr (std::is_arithmetic_v<typename T::value_type>) { \
+double res = INIT_VAL; \
+for (size_t i = 0; i < arg.size(); ++i) { \
+if (col.validity[i]) res = OP; \
+} \
+return res; \
+} \
+throw std::runtime_error("Numeric column required"); \
+}, col.data);
 
     [[nodiscard]] double sum(const std::string& col_name) const {
         NUMERIC_VISITOR(col_name, 0.0, res + static_cast<double>(arg[i]))
@@ -279,4 +279,5 @@ public:
     [[nodiscard]] const std::string& get_column_name(size_t idx) const { return columns.at(idx).name; }
     [[nodiscard]] const std::string& get_row_name(size_t idx) const { return row_names.at(idx); }
 
-    #undef NUMERIC_VISITOR
+#undef NUMERIC_VISITOR
+};

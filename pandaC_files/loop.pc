@@ -4,5 +4,5 @@ def main():
     int64 i = 0
     int64 end = 1000000000
     for i in range(end):
-        ++i
+        i += 1
     print("Loop finished")

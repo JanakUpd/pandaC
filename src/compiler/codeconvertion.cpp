@@ -1,4 +1,6 @@
 #include "codeconvertion.h"
+#include "lexer.h"
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -201,43 +203,115 @@ std::string CodeConvertion::convert(std::istream& in, const std::vector<Compiler
         if (command.starts_with("def ")) {
             finalCppCode += createIndentation(lineIndent);
             finalCppCode += processDef(command, typeBinders);
+            currentIndent = lineIndent;
+            continue;
         }
-        else if (command.starts_with("using "))
-            pandaCLibrariesUsed.emplace(command.substr(6));
-        else {
-            bool matchedKeyword = false;
-            auto keyword = findKeyword(command, keywords);
-            if (keyword != nullptr) {
-                for (const auto &mapEntry: keyword->maps) {
-                    std::vector<std::string> capturedArgs;
 
-                    if (matchPattern(command, mapEntry.first, capturedArgs)) {
-                        std::string result = mapEntry.second;
-                        for (size_t i = 0; i < capturedArgs.size(); ++i) {
-                            std::string pl = "[" + std::to_string(i) + "]";
-                            size_t pos = 0;
-                            while ((pos = result.find(pl, pos)) != std::string::npos) {
-                                result.replace(pos, pl.length(), capturedArgs[i]);
-                                pos += capturedArgs[i].length();
-                            }
-                        }
-                        finalCppCode += createIndentation(lineIndent) + result + "\n";
-                        matchedKeyword = true;
-                        break;
-                    }
+        if (command.starts_with("using ")) {
+            pandaCLibrariesUsed.emplace(command.substr(6));
+            currentIndent = lineIndent;
+            continue;
+        }
+
+        if (command.starts_with("if ") || command.starts_with("elif ")) {
+            bool is_elif = command.starts_with("elif ");
+            size_t start_idx = is_elif ? 5 : 3;
+            size_t end_idx = command.length();
+            if (command.back() == ':') end_idx -= 1;
+
+            std::string condition = command.substr(start_idx, end_idx - start_idx);
+
+            Lexer lexer;
+            try {
+                Expression ast = lexer.fromString(condition);
+                std::string cpp_cond = lexer.toCppString(ast);
+
+                if (is_elif) {
+                    finalCppCode += createIndentation(lineIndent) + "else if " + cpp_cond + "\n";
+                } else {
+                    finalCppCode += createIndentation(lineIndent) + "if " + cpp_cond + "\n";
                 }
             }
+            catch(const std::exception& e) {
+                if (is_elif) finalCppCode += createIndentation(lineIndent) + "else if " + condition + "\n";
+                else finalCppCode += createIndentation(lineIndent) + "if " + condition + "\n";
+            }
 
-            if (!matchedKeyword) {
+            currentIndent = lineIndent;
+            continue;
+        }
+        else if (command.starts_with("else") && (command.length() == 4 || command[4] == ':')) {
+            finalCppCode += createIndentation(lineIndent) + "else\n";
+            currentIndent = lineIndent;
+            continue;
+        }
+        bool matchedKeyword = false;
+        auto keyword = findKeyword(command, keywords);
+        if (keyword != nullptr) {
+            for (const auto &mapEntry: keyword->maps) {
+                std::vector<std::string> capturedArgs;
+                if (matchPattern(command, mapEntry.first, capturedArgs)) {
+                    std::string result = mapEntry.second;
+                    for (size_t i = 0; i < capturedArgs.size(); ++i) {
+                        std::string pl = "[" + std::to_string(i) + "]";
+                        size_t pos = 0;
+                        while ((pos = result.find(pl, pos)) != std::string::npos) {
+                            result.replace(pos, pl.length(), capturedArgs[i]);
+                            pos += capturedArgs[i].length();
+                        }
+                    }
+                    finalCppCode += createIndentation(lineIndent) + result + "\n";
+                    matchedKeyword = true;
+                    break;
+                }
+            }
+        }
+
+        if (!matchedKeyword) {
+            size_t eq_pos = command.find('=');
+            bool handledByLexer = false;
+
+            if (eq_pos != std::string::npos && command.find("==") == std::string::npos) {
+                std::string lhs = command.substr(0, eq_pos);
+                std::string rhs = command.substr(eq_pos + 1);
+                lhs = convertTypes(lhs, typeBinders);
+
+                try {
+                    Lexer lexer;
+                    Expression ast = lexer.fromString(rhs);
+                    std::string cpp_expr = lexer.toCppString(ast);
+                    if (rhs.find("**") != std::string::npos) {
+                        cppLibrariesUsed.insert("cmath");
+                    }
+                    finalCppCode += createIndentation(lineIndent) + lhs + "= " + cpp_expr + ";\n";
+                    handledByLexer = true;
+                }
+                catch (const std::exception& e) {}
+            }
+
+            if (!handledByLexer) {
                 command = convertTypes(command, typeBinders);
-                finalCppCode += createIndentation(lineIndent) + command + ";\n";
+                if (command.starts_with("return ")) {
+                    std::string ret_val = command.substr(7);
+                    try {
+                        Lexer lexer;
+                        Expression ast = lexer.fromString(ret_val);
+                        finalCppCode += createIndentation(lineIndent) + "return " + lexer.toCppString(ast) + ";\n";
+                    } catch (...) {
+                        finalCppCode += createIndentation(lineIndent) + command + ";\n";
+                    }
+                } else {
+                    finalCppCode += createIndentation(lineIndent) + command + ";\n";
+                }
             }
         }
         currentIndent = lineIndent;
     }
+
     finalCppCode += adjustBraces(currentIndent, 0);
     return finalCppCode;
 }
+
 
 std::string CodeConvertion::translateArgs(const std::string &rawArgs, const std::vector<Compiler::TypeBinder> *typeBinders) {
     if (rawArgs.empty()) return "";

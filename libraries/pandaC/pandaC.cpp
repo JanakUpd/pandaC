@@ -1,3 +1,5 @@
+#include <iostream>
+#include <string>
 template<typename T> struct Var;
 
 template<typename T>
@@ -23,6 +25,9 @@ struct Var {
     template<typename U> requires (!std::is_same_v<std::decay_t<U>, T> && std::convertible_to<U, T>)
     Var(const U &v) : value(v) {}
 
+    template<typename U> requires std::convertible_to<U, T>
+    Var(const Var<U>& other) : value(other.value) {}
+
     explicit Var(const Var<std::string> &v) requires (!std::is_same_v<T, std::string>) {
         std::stringstream ss(v.value);
         if (!(ss >> value))
@@ -34,6 +39,12 @@ struct Var {
 
     Var &operator=(const T &v) {
         value = v;
+        return *this;
+    }
+
+    template<typename U> requires std::convertible_to<U, T>
+    Var& operator=(const Var<U>& other) {
+        value = static_cast<T>(other.value);
         return *this;
     }
 
@@ -178,6 +189,17 @@ std::vector<Var<size_t>> range(long long end) {
     return range(0, end, 1);
 }
 
-void print(const std::string& message, const std::string& end = "\n") {
-    std::cout << message << end;
+void print() {
+    std::cout << std::endl;
+}
+
+template<typename T, typename... Args>
+void print(const T& first, const Args&... args) {
+    std::cout << first;
+    if constexpr (sizeof...(args) > 0) {
+        std::cout << " ";
+        print(args...);
+    }
+    else
+        std::cout << "\n";
 }

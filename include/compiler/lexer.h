@@ -20,12 +20,16 @@ struct Atom {
 struct Operator {
     std::string symbol;
 };
-
 struct Expression;
 using ExprPtr = std::unique_ptr<Expression>;
 
+struct FunctionCall {
+    std::string name;
+    std::vector<ExprPtr> arguments;
+};
+
 struct Expression {
-    std::variant<Atom, Operator> value;
+    std::variant<Atom, Operator, FunctionCall> value;
     ExprPtr lhs = nullptr;
     ExprPtr rhs = nullptr;
 };
@@ -39,7 +43,8 @@ class Lexer {
     Expression parseExpression(float minBp);
     void replace(std::string& str, const std::string& from, const std::string& to);
 public:
-    static std::string toString(const Expression& expr);
+    static std::string astToString(const Expression& expr);
+    static std::string toCppString(const Expression& expr);
     Expression fromString(std::string input);
 };
 

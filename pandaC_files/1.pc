@@ -1,8 +1,83 @@
 using pandaC
 
-def int test(int a, int b):
-    return a + b
+# 1. Тестирование объявления функции и рекурсии
+def int64 calculate_factorial(int64 n):
+    if n <= 1:
+        return 1
+    else:
+        # Проверка вызова функции внутри математического выражения
+        return n * calculate_factorial(n - 1)
 
-def int main():
-    int result = test(5, 10)
-    print(result + "s", ' ')
+# 2. Тестирование сложной математики и передачи аргументов
+def int64 math_magic(int64 a, int64 b):
+    # Приоритет операций: ** имеет наивысший, затем *, затем +
+    int64 result = a + b * 2 ** 3
+    return result
+
+def main():
+    print("--- PANDAC COMPILER TEST SUITE ---")
+
+    # 3. Тест базовых переменных и математики
+    int64 x = 10
+    int64 y = 5
+    int64 z = 2
+
+    # Ожидаем: 10 + (5 * 2) = 20
+    int64 math1 = x + y * z
+    print("Math 1 (Expected 20):")
+    print(math1)
+
+    # Ожидаем: (10 + 5) * 2 = 30
+    int64 math2 = (x + y) * z
+    print("Math 2 (Expected 30):")
+    print(math2)
+
+    # Унарный минус: -10 * 5 = -50
+    int64 math3 = -x * y
+    print("Math 3 (Expected -50):")
+    print(math3)
+
+    # 4. Тест вызова пользовательских функций
+    int64 fact_res = calculate_factorial(5)
+    print("Factorial of 5 (Expected 120):")
+    print(fact_res)
+
+    int64 magic_res = math_magic(x, y)
+    print("Math magic result:")
+    print(magic_res)
+
+    # 5. Тест вложенных условий if-elif-else и логических операторов
+    print("--- Testing conditions ---")
+    if x == 10 and y == 5:
+        print("x is 10 and y is 5")
+
+        # Вложенный if (проверка отступов)
+        if z < 5:
+            print("z is less than 5!")
+        else:
+            print("z is greater than 5!")
+
+    elif x == 15:
+        print("x is 15")
+    else:
+        print("Something else")
+
+    # 6. Тест циклов и комбинированной логики
+    print("--- Testing loops ---")
+    int64 loop_sum = 0
+    int64 end_val = 6
+
+    for i in range(end_val):
+        # Если число больше 3, вычитаем его, иначе прибавляем
+        if i > 3:
+            loop_sum = loop_sum - i
+        else:
+            loop_sum = loop_sum + i
+
+        # Проверка двойной вложенности внутри цикла
+        if i == 5:
+            print("Reached the end of loop logic")
+
+    print("Final loop sum:")
+    print(loop_sum)
+    print("--- TESTS FINISHED ---")
