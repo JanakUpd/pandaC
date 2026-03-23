@@ -63,8 +63,9 @@ public:
         static std::string processPrint(std::vector<std::string>* params, std::vector<TypeBinder>* typeBinders);
     };
 public:
-    static std::string run(std::stringstream& ss, bool execute = false, bool log = false);
-    static void build(const std::string& code, const std::string& filePath, bool execute = false, bool log = false);
+    static std::string run(std::stringstream& ss, bool log = false);
+    static std::string build(const std::string& code, const std::string& filePath, bool log = false);
+    static void execute(const std::string& file, const bool& log = false);
 };
 
 

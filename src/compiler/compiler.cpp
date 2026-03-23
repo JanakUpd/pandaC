@@ -122,7 +122,7 @@ std::pair<std::vector<Compiler::Keyword>, std::vector<Compiler::TypeBinder>> rea
     return std::make_pair(keywords, typeBinders);
 }
 
-std::string Compiler::run(std::stringstream& input, bool execute, bool log) {
+std::string Compiler::run(std::stringstream& input, bool log) {
     std::stringstream output;
     auto [keywords, typeBinders] = readConf("../config/default.conf");
 
@@ -188,13 +188,6 @@ std::string Compiler::run(std::stringstream& input, bool execute, bool log) {
         }
     }
 
-    // std::string pathToOutput = file.substr(0, file.rfind('/')) + "/pandaC_build";
-    // ensureExists(pathToOutput);
-    // std::string filenameOnly = file.substr(file.rfind('/'));
-    // std::string baseName = filenameOnly.substr(0, filenameOnly.rfind('.'));
-    // std::string outputFile = pathToOutput + baseName;
-    // std::ofstream out(outputFile + ".cpp");
-
     for (auto &item: CodeConvertion::cppLibrariesUsed)
         output << "#include <" << item << ">\n";
 
@@ -204,47 +197,42 @@ std::string Compiler::run(std::stringstream& input, bool execute, bool log) {
     return output.str();
 }
 
-void Compiler::build(const std::string& code, const std::string& filePath, bool execute, bool log) {
-    if (filePath.empty()) return;
+std::string Compiler::build(const std::string& code, const std::string& filePath, bool log) {
+    if (filePath.empty()) {
+        Notifier::notifyError(ERROR_TYPE::FILE_NOT_FOUND);
+        throw std::runtime_error("File not found.");
+    }
 
-    // Determine output paths
     std::string pathToOutput = filePath.substr(0, filePath.rfind('/')) + "/pandaC_build";
     ensureExists(pathToOutput);
     std::string filenameOnly = filePath.substr(filePath.rfind('/'));
     std::string baseName = filenameOnly.substr(0, filenameOnly.rfind('.'));
     std::string outputFile = pathToOutput + baseName;
 
-    // Write C++ file
     std::ofstream out(outputFile + ".cpp");
     out << code;
     out.close();
 
-    // Compile
     if (std::system(("g++ -std=c++23 " + outputFile + ".cpp" + " -o " + outputFile).c_str()) != 0) {
         if (log) Notifier::notifyError(ERROR_TYPE::UNKNOWN_ERROR);
-        throw std::runtime_error("Error while compiling");
+        throw std::runtime_error("Error while building");
     }
-
-    // Execute
-    if (execute) {
-        auto start_time = std::chrono::high_resolution_clock::now();
+    return outputFile;
+}
+void Compiler::execute(const std::string& file, const bool& log) {
 #ifdef _WIN32
-        FILE *pipe = _popen(outputFile.c_str(), "r");
+    FILE *pipe = _popen(outputFile.c_str(), "r");
 #else
-        FILE *pipe = popen(outputFile.c_str(), "r");
+    FILE *pipe = popen(file.c_str(), "r");
 #endif
-        char buffer[1024];
-        if (pipe) {
-            while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
-                std::cout << buffer;
+    char buffer[1024];
+    if (pipe) {
+        while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+            std::cout << buffer;
 #ifdef _WIN32
-            _pclose(pipe);
+        _pclose(pipe);
 #else
-            pclose(pipe);
+        pclose(pipe);
 #endif
-        }
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::high_resolution_clock::now() - start_time);
-        Notifier::notifyInfo("Program executed in " + (duration.count() == 0 ? "<1" : std::to_string(duration.count())) + " miliseconds.");
     }
 }

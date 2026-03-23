@@ -3,6 +3,7 @@
 #include "preprocessor.h"
 #include "compiler.h"
 #include "notifier.h"
+#include "clock.h"
 
 std::string findSpecifier(int argc, char** argv, const std::string& specifier)
 {
@@ -29,6 +30,7 @@ bool containsSpecifier(int argc, char** argv, const std::string& specifier)
 }
 
 int main(int argc, char** argv) {
+    //Extract filepath from arguments
     std::string filePath;
     if (containsSpecifier(argc, argv, "-f"))
         filePath = findSpecifier(argc, argv, "-f=");
@@ -38,20 +40,37 @@ int main(int argc, char** argv) {
     bool log = containsSpecifier(argc, argv, "--debug");
     if (log) Notifier::notifyInfo("Starting compilation of " + filePath);
 
+    //Preprocessing: pandac code insertion and comment removal
     if (log)
         Notifier::notifyInfo("Preprocessing...");
-    auto start_time = std::chrono::high_resolution_clock::now();
+    clockTimer timer = clockTimer();
+    uint64_t duration;
+    timer.start();
     std::stringstream ss = Preprocessor::run(filePath, log);
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start_time);
+    duration = timer.getMiliseconds();
     if (log)
-        Notifier::notifyInfo("Preprocessing finished successfully in " + (duration.count() == 0 ? "<1" : std::to_string(duration.count())) + " miliseconds.");
+        Notifier::notifyInfo("Preprocessing finished successfully in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
 
+    //Compiling: converting pandac code into c++
     if (log)
         Notifier::notifyInfo("Compiling...");
-    start_time = std::chrono::high_resolution_clock::now();
-    std::string cppTranslatedCode = Compiler::run(ss, !containsSpecifier(argc, argv, "--no-execution"), log);
-    duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start_time);
+    timer.start();
+    std::string cppTranslatedCode = Compiler::run(ss, log);
+    duration = timer.getMiliseconds();
     if (log)
-        Notifier::notifyInfo("Compilation finished successfully in " + (duration.count() == 0 ? "<1" : std::to_string(duration.count())) + " miliseconds.");
-    Compiler::build(cppTranslatedCode, filePath, !containsSpecifier(argc, argv, "--no-execution"), log);
+        Notifier::notifyInfo("Compilation finished successfully in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
+
+    //Building: building the cpp code into executable via gcc
+    timer.start();
+    std::string exeFile = Compiler::build(cppTranslatedCode, filePath, log);
+    duration = timer.getMiliseconds();
+    Notifier::notifyInfo("Program build by gcc in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
+
+    //Execution: start compiled file
+    if (!containsSpecifier(argc, argv, "--no-execution")) {
+        timer.start();
+        Compiler::execute(exeFile, log);
+        duration = timer.getMiliseconds();
+        Notifier::notifyInfo("Program executed in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
+    }
 }
