@@ -1,6 +1,7 @@
 add_library(compiler ${CMAKE_SOURCE_DIR}/src/compiler/compiler.cpp
         ${CMAKE_SOURCE_DIR}/src/compiler/codeconvertion.cpp
         ${CMAKE_SOURCE_DIR}/src/compiler/preprocessor.cpp
+        ${CMAKE_SOURCE_DIR}/src/compiler/lexer.cpp
 )
 add_library(notifier ${CMAKE_SOURCE_DIR}/src/notifier/notifier.cpp)
 
