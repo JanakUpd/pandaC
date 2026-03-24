@@ -22,8 +22,30 @@ std::stringstream Preprocessor::run(const std::string &filePath, const bool &log
         throw std::runtime_error("runtime error");
     }
     std::string line;
-    while (getline(in, line))
-        ss << (line.find('#') == std::string::npos ? line : line.substr(0, line.find('#'))) << std::endl;
+    bool commented = false;
+    while (getline(in, line)) {
+        if (commented)
+            continue;
+        if (line.find("/*") != std::string::npos) {
+            commented = true;
+            continue;
+        }
+        if (line.find("*/") != std::string::npos) {
+            commented = false;
+            line = line.substr(line.find("*/"));
+        }
+        std::string processedLine = line.find('#') == std::string::npos ? line : line.substr(0, line.find('#'));
+        bool isEmpty = true;
+        for (char c : processedLine) {
+            if (!std::isspace(c)) {
+                isEmpty = false;
+                break;
+            }
+        }
+
+        if (!isEmpty)
+            ss << processedLine << std::endl;
+    }
     in.close();
     return ss;
 }

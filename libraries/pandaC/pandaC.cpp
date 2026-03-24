@@ -58,6 +58,10 @@ struct Var {
 template<typename T>
 struct Array {
     std::vector<T> data;
+    Array() = default;
+
+    template<typename U>
+    Array(std::initializer_list<U> init) : data(init.begin(), init.end()) {}
 
     Var<size_t> len() const { return Var<size_t>(data.size()); }
 

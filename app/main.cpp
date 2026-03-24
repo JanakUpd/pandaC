@@ -1,3 +1,4 @@
+#include <iostream>
 #include <string>
 
 #include "preprocessor.h"
@@ -56,9 +57,9 @@ int main(int argc, char** argv) {
         Notifier::notifyInfo("Compiling...");
     timer.start();
     std::string cppTranslatedCode = Compiler::run(ss, log);
-    duration = timer.getMicroseconds();
+    duration = timer.getMiliseconds();
     if (log)
-        Notifier::notifyInfo("Compilation finished successfully in " + (duration == 0 ? "<1" : std::to_string(duration)) + " microseconds.");
+        Notifier::notifyInfo("Compilation finished successfully in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
 
     //Building: building the cpp code into executable via gcc
     timer.start();

@@ -1,4 +1,9 @@
 using pandaC
 
-def int main():
-    print("Greetings to the world of PandaC!")
+def main():
+    str name = "Janak"
+    str greeting = "Hello, " + name + "! Welcome to pandaC."
+    print(greeting)
+
+    # Проверка спецсимволов внутри строки
+    print("Math test: (1 + 2) * 3 = 9")

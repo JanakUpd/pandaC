@@ -1,10 +1,17 @@
 using pandaC
 
-def int main():
-    fl2 pi = 3.14159
-    int radius = 5
-    print("Value of PI: " + pi)
-    fl2 area = pi * radius * radius
-    print("Area of circle with radius " + radius + " is " + area)
-    int temp = -10
-    print("Temperature: " + temp + "C")
+def main():
+    print("--- AST Test ---")
+
+    # 1. Объявление переменных и сложные типы
+    list<int64> arr = [10, 20, 30]
+    int64 index = 1
+
+    # 2. Доступ по индексу и математика
+    int64 val = arr[index - 1] + arr[index + 1]
+    print(val) # Должно вывести 40 (10 + 30)
+
+    # 3. Точечная нотация
+    int64 arr_len = arr.len()
+    print("Array length is:")
+    print(arr_len)

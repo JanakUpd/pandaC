@@ -1,9 +1,16 @@
 using pandaC
 
-def int main():
-    int age = 25
-    int year = 2024
-    print("The year is " + year)
-    print(age + " is my age")
-    print("In " + year + " I am " + age + " years old")
-    print("Next year I will be " + (age + 1))
+def main():
+    # Указываем тип списка (list<int64>), так как C++ требует строгую типизацию
+    list<int64> my_arr = [10, 20, 30]
+
+    # Доступ по индексу (Lexer -> IndexAccess)
+    int64 first = my_arr[0]
+    int64 second = my_arr[1]
+    int64 third = 1
+
+    print("First element is:")
+    print(first)
+
+    print("Math with array elements:")
+    print(first + second)

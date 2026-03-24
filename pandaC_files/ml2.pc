@@ -1,19 +1,19 @@
 using pandaC
 using PandaML
 
-def main()
+def main():
     print("KNN Test")
     Matr<fl2> X_train
-    X_train.data = {{1.0, 1.0},{1.0, 2.0},{5.0, 5.0},{5.0, 6.0}}
+    X_train.data = [[1.0, 1.0], [1.0, 2.0], [5.0, 5.0], [5.0, 6.0]]
     Array<fl2> y_train
-    y_train.data = {0.0, 0.0, 1.0, 1.0}
+    y_train.data = [0.0, 0.0, 1.0, 1.0]
 
-    KNNClassifier model(3)
+    KNNClassifier model = KNNClassifier(3)
     print("Training KNN model...")
     model.fit(X_train.data, y_train.data)
 
     Array<fl2> unknown
-    unknown.data = {6.0, 6.0}
+    unknown.data = [6.0, 6.0]
 
     fl2 prediction = model.predict(unknown.data)
     print("Predicted class: " + prediction)

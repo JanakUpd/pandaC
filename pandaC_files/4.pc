@@ -11,6 +11,6 @@ def int main():
     int y = 50
     int sum = add(x, y)
     print("Sum result: " + sum)
-    print("Division result: " + divide(10.0, 2.3))
+    print("Division result: " + divide(10.0, 2.0))
     str greeting = "Hello"
     print(greeting + " World " + 123)

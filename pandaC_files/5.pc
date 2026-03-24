@@ -1,6 +1,6 @@
 using pandaC
 
-def int main():
+def main():
     #For loops
     for i in range(10):
         print("Count: " + i)
