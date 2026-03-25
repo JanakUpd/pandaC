@@ -13,12 +13,12 @@ std::string CodeConvertion::convert(std::istream& in,
     try {
         Lexer lexer;
         Expression ast = lexer.fromString(fullCode);
-        std::cout << "DEBUG: TOKENS (" << lexer.tokens.size() << "): " << std::endl;
-        for (const auto& t : lexer.tokens) {
-            std::cout << "[" << (t.type == TokenType::Newline ? "NEWLINE" : t.lexeme) << "] ";
-            if(t.type == TokenType::Newline) std::cout << std::endl;
-        }
-        std::cout << std::endl << "--- END TOKENS ---" << std::endl;
+        // std::cout << "DEBUG: TOKENS (" << lexer.tokens.size() << "): " << std::endl;
+        // for (const auto& t : lexer.tokens) {
+        //     std::cout << "[" << (t.type == TokenType::Newline ? "NEWLINE" : t.lexeme) << "] ";
+        //     if(t.type == TokenType::Newline) std::cout << std::endl;
+        // }
+        // std::cout << std::endl << "--- END TOKENS ---" << std::endl;
         if (std::holds_alternative<Program>(ast.value)) {
             const auto& prog = std::get<Program>(ast.value);
             for (const auto& stmt : prog.statements) {

@@ -13,6 +13,8 @@ std::pair<float, float> Lexer::getBindingPower(const std::string &symbol) {
     if (symbol == "-") return {4.0, 4.1};
     if (symbol == "*") return {5.0, 5.1};
     if (symbol == "/") return {5.0, 5.1};
+    if (symbol == "//") return {5.0, 5.1};
+    if (symbol == "%") return {5.0, 5.1};
     if (symbol == "**") return {6.1, 6.0};
     if (symbol == "(") return {8.0, 0.0};
     if (symbol == ",") return {0.0, 0.0};
@@ -31,6 +33,8 @@ std::pair<float, float> Lexer::getBindingPower(const std::string &symbol) {
     if (symbol == "-=") return {0.1, 0.0};
     if (symbol == "*=") return {0.1, 0.0};
     if (symbol == "/=") return {0.1, 0.0};
+    if (symbol == "//=") return {0.1, 0.0};
+    if (symbol == "%=") return {0.1, 0.0};
     throw std::invalid_argument("invalid operator: " + symbol);
 }
 
@@ -185,7 +189,25 @@ Expression Lexer::fromString(std::string input) {
             ++i;
             continue;
         }
-        if (c == '+' || c == '-' || c == '*' || c == '/' ||
+        if (c == '/' && i + 1 < input.length() && input[i + 1] == '/') {
+            if (i + 2 < input.length() && input[i + 2] == '=') {
+                push_atom();
+                tokens.push_back(Token{TokenType::Operator, "//="});
+                i += 2;
+                continue;
+            }
+            push_atom();
+            tokens.push_back(Token{TokenType::Operator, "//"});
+            ++i;
+            continue;
+        }
+        if (c == '%' && i + 1 < input.length() && input[i + 1] == '=') {
+            push_atom();
+            tokens.push_back(Token{TokenType::Operator, "%="});
+            ++i;
+            continue;
+        }
+        if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' ||
             c == '(' || c == ')' ||
             c == '[' || c == ']' ||
             c == '{' || c == '}' ||
@@ -370,8 +392,7 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               std::string result = "PandaCDict{";
                               for (size_t i = 0; i < dict.elements.size(); ++i) {
                                   result += "{" + toCppString(*dict.elements[i].first, indentLevel, typeBinders) +
-                                          ", pandac_str(" + toCppString(*dict.elements[i].second, indentLevel,
-                                                                        typeBinders) + ")}";
+                                          ", " + toCppString(*dict.elements[i].second, indentLevel, typeBinders) + "}";
                                   if (i < dict.elements.size() - 1) result += ", ";
                               }
                               result += "}";
@@ -409,7 +430,7 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               std::string result = getIndent(indentLevel) + cpp_ret_type + " " + func.name + "(";
                               for (size_t i = 0; i < func.args.size(); ++i) {
                                   std::string arg_type = func.args[i].type;
-                                  if (typeBinders != nullptr && arg_type != "auto") {
+                                  if (typeBinders != nullptr && arg_type != "PandaVar") {
                                       for (const auto &item: *typeBinders) {
                                           if (item.pandacName.empty()) continue;
                                           size_t pos = 0;
@@ -431,8 +452,19 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                                   result += arg_type + " " + func.args[i].name;
                                   if (i < func.args.size() - 1) result += ", ";
                               }
-                              result += ") \n" + getIndent(indentLevel) + toCppString(
-                                  *func.body, indentLevel, typeBinders);
+
+                              result += ") \n" + getIndent(indentLevel);
+
+                              std::string body_str = toCppString(*func.body, indentLevel, typeBinders);
+
+                              if (!body_str.empty() && body_str.back() == '}') {
+                                  std::string default_ret = (func.name == "main") ? "return 0;" : "return PandaVar();";
+                                  body_str.pop_back();
+                                  body_str += getIndent(indentLevel + 1) + default_ret + "\n" + getIndent(indentLevel) +
+                                          "}";
+                              }
+
+                              result += body_str;
                               return result;
                           },
                           [&](const Program &prog) -> std::string {
@@ -456,17 +488,17 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               return result;
                           },
                           [&](const WhileStatement &while_stmt) -> std::string {
-                              return "while (" + toCppString(*while_stmt.condition, 0, typeBinders) + ") \n" +
+                              return "while (pandac_bool(" + toCppString(*while_stmt.condition, 0, typeBinders) +
+                                     ")) \n" +
                                      getIndent(indentLevel) + toCppString(*while_stmt.body, indentLevel, typeBinders);
                           },
+
                           [&](const IfStatement &if_stmt) -> std::string {
                               std::string cond_str = toCppString(*if_stmt.condition, 0, typeBinders);
-                              std::string result = (!cond_str.empty() && cond_str.front() == '(' && cond_str.back() ==
-                                                    ')')
-                                                       ? "if " + cond_str + " \n"
-                                                       : "if (" + cond_str + ") \n";
+                              std::string result = "if (pandac_bool(" + cond_str + ")) \n";
 
                               result += getIndent(indentLevel) + toCppString(*if_stmt.body, indentLevel, typeBinders);
+
 
                               if (if_stmt.else_body) {
                                   if (std::holds_alternative<IfStatement>(if_stmt.else_body->value)) {
@@ -485,30 +517,49 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                           },
                           [&](const Operator &op_val) -> std::string {
                               std::string op = op_val.symbol;
-                              if (op == "=" || op == "+=" || op == "-=" || op == "*=" || op == "/=")
-                                  return toCppString(*expr.lhs, indentLevel, typeBinders) + " " + op + " " +
-                                         toCppString(*expr.rhs, indentLevel, typeBinders);
 
                               if (op == ".")
-                                  return
-                                          toCppString(*expr.lhs, indentLevel, typeBinders) + "." + toCppString(
-                                              *expr.rhs, indentLevel, typeBinders);
+                                  return toCppString(*expr.lhs, indentLevel, typeBinders) + "." + toCppString(
+                                             *expr.rhs, indentLevel, typeBinders);
 
-                              if (op == "and") op = "&&";
-                              else if (op == "or") op = "||";
-                              else if (op == "not") op = "!";
+                              if (!expr.lhs && expr.rhs) {
+                                  std::string rhs_str = toCppString(*expr.rhs, indentLevel, typeBinders);
+                                  if (op == "not") return "pandac_negate(" + rhs_str + ")";
+                                  return "(" + op + " " + rhs_str + ")";
+                              }
 
-                              if (!expr.lhs && expr.rhs)
-                                  return "(" + op + toCppString(*expr.rhs, indentLevel, typeBinders) + ")";
-                              if (op == "**")
-                                  return "std::pow(" + toCppString(*expr.lhs, indentLevel, typeBinders) + ", " +
-                                         toCppString(*expr.rhs, indentLevel, typeBinders) + ")";
-                              if (expr.lhs && expr.rhs)
-                                  return "(" + toCppString(*expr.lhs, indentLevel, typeBinders) + " " + op + " " +
-                                         toCppString(*expr.rhs, indentLevel, typeBinders) + ")";
+                              if (expr.lhs && expr.rhs) {
+                                  std::string lhs_str = toCppString(*expr.lhs, indentLevel, typeBinders);
+                                  std::string rhs_str = toCppString(*expr.rhs, indentLevel, typeBinders);
+                                  if (op == "=") return "pandac_assign(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "+=") return "pandac_assign_add(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "-=") return "pandac_assign_sub(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "*=") return "pandac_assign_mul(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "/=") return "pandac_assign_div(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "//=") return "pandac_assign_int_div(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "%=") return "pandac_assign_mod(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "**") return "pandac_pow(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "and") return "pandac_and(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "or") return "pandac_or(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "not") return "pandac_negate(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "+") return "pandac_add(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "-") return "pandac_sub(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "*") return "pandac_mul(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "/") return "pandac_div(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "//") return "pandac_int_div(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "%") return "pandac_mod(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "==") return "pandac_eq(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "!=") return "pandac_neq(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "<") return "pandac_less(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "<=") return "pandac_less_eq(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == ">") return "pandac_greater(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == ">=") return "pandac_greater_eq(" + lhs_str + ", " + rhs_str + ")";
+                                  return "(" + lhs_str + " " + op + " " + rhs_str + ")";
+                              }
 
                               return "";
                           },
+
                           [&](const FunctionCall &func) -> std::string {
                               std::string target_name = toCppString(*func.target, indentLevel, typeBinders);
 
@@ -534,7 +585,7 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               return "return;\n";
                           },
                           [&](const ArrayLiteral &arr) -> std::string {
-                              std::string result = "{";
+                              std::string result = "PandaCList{";
                               for (size_t i = 0; i < arr.elements.size(); ++i) {
                                   result += toCppString(*arr.elements[i], indentLevel, typeBinders);
                                   if (i < arr.elements.size() - 1) result += ", ";
@@ -573,8 +624,9 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               return result;
                           },
                           [&](const IndexAccess &idx) -> std::string {
-                              return toCppString(*idx.array_expr, indentLevel, typeBinders) + "[" + toCppString(
-                                         *idx.index_expr, indentLevel, typeBinders) + "]";
+                              return toCppString(*idx.array_expr, indentLevel, typeBinders) + ".pandac_getitem(" +
+                                     toCppString(
+                                         *idx.index_expr, indentLevel, typeBinders) + ")";
                           },
                           [&](auto &&) -> std::string {
                               return "/* UNHANDLED AST NODE */";
@@ -640,7 +692,7 @@ Expression Lexer::parseStatement() {
         consume();
 
         Token first_token = consume();
-        std::string return_type = "auto";
+        std::string return_type = "PandaVar";
         std::string func_name = first_token.lexeme;
 
         if (peek().lexeme != "(") {
@@ -657,7 +709,7 @@ Expression Lexer::parseStatement() {
         if (peek().lexeme != ")") {
             while (true) {
                 Token arg_first = consume();
-                std::string arg_type = "auto";
+                std::string arg_type = "PandaVar";
                 std::string arg_name = arg_first.lexeme;
 
                 if (peek().type == TokenType::Atom) {
@@ -776,7 +828,8 @@ Expression Lexer::parseStatement() {
                                  first.lexeme == "not" || first.lexeme == "+");
 
             if (!isValidStart) {
-                throw std::invalid_argument("Syntax error: Statement cannot start with operator '" + first.lexeme + "' (Variables missing?)");
+                throw std::invalid_argument(
+                    "Syntax error: Statement cannot start with operator '" + first.lexeme + "' (Variables missing?)");
             }
         }
 
@@ -819,7 +872,7 @@ Expression Lexer::parseStatement() {
                 std::string var_name = std::get<Atom>(left_expr.value).name;
                 if (!isDeclared(var_name)) {
                     declareVar(var_name);
-                    return Expression{VarDeclaration{"auto", var_name, std::move(right_expr)}, nullptr, nullptr};
+                    return Expression{VarDeclaration{"PandaVar", var_name, std::move(right_expr)}, nullptr, nullptr};
                 }
             }
 
@@ -933,8 +986,7 @@ Expression Lexer::parseExpression(float minBp) {
         Token closebrace = consume();
         if (closebrace.lexeme != "}") throw std::invalid_argument("Expected '}' after dict");
         lhs = Expression{DictLiteral{std::move(elements)}, nullptr, nullptr};
-    }
-    else {
+    } else {
         throw std::invalid_argument("Unexpected token: " + token.lexeme);
     }
 

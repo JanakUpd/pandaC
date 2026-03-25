@@ -1,5 +1,3 @@
-#include <iostream>
-#include <string>
 template<typename T> struct Var;
 
 template<typename T>
@@ -206,53 +204,46 @@ void pandac_print(const T& first, const Args&... args) {
     pandac_print(args...);
 }
 
+struct PandaVar;
+struct PandaCList;
+struct PandaCDict;
+
 template <typename T>
 std::string pandac_str(const T& val) {
-    return to_str(val);
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar>) return static_cast<std::string>(val);
+    else return to_str(val);
 }
 
 template <typename T>
 int pandac_int(const T& val) {
-    if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) {
-        return std::stoi(std::string(val));
-    } else {
-        return static_cast<int>(val);
-    }
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar>) return static_cast<int>(val);
+    else if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) return std::stoi(std::string(val));
+    else return static_cast<int>(val);
 }
 
 template <typename T>
 double pandac_float(const T& val) {
-    if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) {
-        return std::stod(std::string(val));
-    } else {
-        return static_cast<double>(val);
-    }
-}
-
-template <typename T>
-auto pandac_len(const T& val) {
-    if constexpr (requires { val.size(); }) {
-        return val.size();
-    } else if constexpr (requires { val.len(); }) {
-        return val.len();
-    } else if constexpr (requires { val.length(); }) {
-        return val.length();
-    } else {
-        return 0;
-    }
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar>) return static_cast<double>(val);
+    else if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) return std::stod(std::string(val));
+    else return static_cast<double>(val);
 }
 
 template <typename T>
 bool pandac_bool(const T& val) {
-    if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) {
-        return std::string(val).length() > 0;
-    } else {
-        return static_cast<bool>(val);
-    }
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar>) return static_cast<bool>(val);
+    else if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) return std::string(val).length() > 0;
+    else return static_cast<bool>(val);
 }
 
-struct PandaCDictProxy;
-struct NestedProxy;
+template <typename T>
+auto pandac_len(const T& val) {
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar>) return val.length();
+    else if constexpr (requires { val.size(); }) return val.size();
+    else if constexpr (requires { val.len(); }) return val.len();
+    else if constexpr (requires { val.length(); }) return val.length();
+    else return 0;
+}
+
 
 inline std::string unquote(std::string s) {
     if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
@@ -261,148 +252,145 @@ inline std::string unquote(std::string s) {
     return s;
 }
 
-struct NestedProxy {
-    PandaCDictProxy* parent;
-    std::string childKey;
-    std::string cachedValue;
-
-    NestedProxy(PandaCDictProxy* p, std::string k, std::string v) : parent(p), childKey(k), cachedValue(v) {}
+class PandaVar {
+public:
+    std::any data;
+    PandaVar() = default;
 
     template<typename T>
-    NestedProxy& operator=(const T& val); // Реализация отложена
-
-    operator std::string() const { return unquote(cachedValue); }
-    operator int() const { try { return std::stoi(unquote(cachedValue)); } catch(...) { return 0; } }
-    operator double() const { try { return std::stod(unquote(cachedValue)); } catch(...) { return 0.0; } }
-
-    bool operator==(const std::string& other) const { return unquote(cachedValue) == other; }
-    bool operator==(const char* other) const { return unquote(cachedValue) == other; }
-    bool operator==(int other) const { return (int)(*this) == other; }
-    bool operator==(bool other) const {
-        std::string v = unquote(cachedValue);
-        bool isTrue = (v == "1" || v == "true" || v == "True");
-        return isTrue == other;
-    }
-};
-
-struct PandaCDictProxy {
-    std::shared_ptr<std::unordered_map<std::string, std::string>> dictRef;
-    std::string key;
+    PandaVar(const T& val) : data(val) {}
 
     template<typename T>
-    PandaCDictProxy& operator=(const T& val) {
-        (*dictRef)[key] = pandac_str(val);
+    PandaVar& operator=(const T& val) {
+        data = val;
         return *this;
     }
 
-    PandaCDictProxy& operator=(const std::string& val) {
-        (*dictRef)[key] = val;
-        return *this;
+    template<typename K>
+    PandaVar& pandac_getitem(const K& key);
+
+    template<typename K>
+    PandaVar& operator[](const K& key) {
+        return pandac_getitem(key);
     }
 
-    operator std::string() const { return (*dictRef)[key]; }
-    operator int() const { try { return std::stoi((*dictRef)[key]); } catch(...) { return 0; } }
-    operator double() const { try { return std::stod((*dictRef)[key]); } catch(...) { return 0.0; } }
+    int length() const;
 
-    bool operator==(const std::string& other) const { return (*dictRef)[key] == other; }
-    bool operator==(const char* other) const { return (*dictRef)[key] == other; }
-    bool operator==(int other) const { return (int)(*this) == other; }
-    bool operator==(bool other) const {
-        std::string v = (*dictRef)[key];
-        bool isTrue = (v == "1" || v == "true" || v == "True");
-        return isTrue == other;
+    std::vector<PandaVar>::iterator begin();
+    std::vector<PandaVar>::iterator end();
+    std::vector<PandaVar>::const_iterator begin() const;
+    std::vector<PandaVar>::const_iterator end() const;
+
+
+    friend PandaVar operator+(const PandaVar& a, const PandaVar& b) {
+        if (a.data.type() == typeid(std::string) || b.data.type() == typeid(std::string))
+            return PandaVar(static_cast<std::string>(a) + static_cast<std::string>(b));
+        if (a.data.type() == typeid(double) || b.data.type() == typeid(double))
+            return PandaVar(static_cast<double>(a) + static_cast<double>(b));
+        return PandaVar(static_cast<int>(a) + static_cast<int>(b));
+    }
+    friend PandaVar operator-(const PandaVar& a, const PandaVar& b) {
+        if (a.data.type() == typeid(double) || b.data.type() == typeid(double)) return PandaVar(static_cast<double>(a) - static_cast<double>(b));
+        return PandaVar(static_cast<int>(a) - static_cast<int>(b));
+    }
+    friend PandaVar operator*(const PandaVar& a, const PandaVar& b) {
+        if (a.data.type() == typeid(double) || b.data.type() == typeid(double)) return PandaVar(static_cast<double>(a) * static_cast<double>(b));
+        return PandaVar(static_cast<int>(a) * static_cast<int>(b));
+    }
+    friend PandaVar operator/(const PandaVar& a, const PandaVar& b) {
+        return PandaVar(static_cast<double>(a) / static_cast<double>(b));
     }
 
-    NestedProxy operator[](const std::string& childKey) {
-        std::string raw = (*dictRef)[key];
-        std::string keyPattern = "\"" + childKey + "\":";
-        size_t pos = raw.find(keyPattern);
-
-        if (pos == std::string::npos) return NestedProxy(this, childKey, "0");
-
-        size_t valStart = pos + keyPattern.length();
-        while (valStart < raw.length() && std::isspace(raw[valStart])) valStart++;
-
-        size_t valEnd;
-        if (raw[valStart] == '"') {
-            valEnd = valStart + 1;
-            while (valEnd < raw.length() && (raw[valEnd] != '"' || raw[valEnd-1] == '\\')) valEnd++;
-            if (valEnd < raw.length()) valEnd++;
-        } else {
-            valEnd = raw.find_first_of(",}", valStart);
-        }
-        if (valEnd == std::string::npos) valEnd = raw.length();
-
-        std::string val = raw.substr(valStart, valEnd - valStart);
-        return NestedProxy(this, childKey, val);
+    explicit operator int() const {
+        if (data.type() == typeid(int)) return std::any_cast<int>(data);
+        if (data.type() == typeid(double)) return static_cast<int>(std::any_cast<double>(data));
+        if (data.type() == typeid(std::string)) { try { return std::stoi(std::any_cast<std::string>(data)); } catch(...) { return 0; } }
+        return 0;
     }
+    explicit operator double() const {
+        if (data.type() == typeid(double)) return std::any_cast<double>(data);
+        if (data.type() == typeid(int)) return static_cast<double>(std::any_cast<int>(data));
+        if (data.type() == typeid(std::string)) { try { return std::stod(std::any_cast<std::string>(data)); } catch(...) { return 0.0; } }
+        return 0.0;
+    }
+    explicit operator bool() const {
+        if (data.type() == typeid(bool)) return std::any_cast<bool>(data);
+        if (data.type() == typeid(int)) return std::any_cast<int>(data) != 0;
+        if (data.type() == typeid(std::string)) return std::any_cast<std::string>(data).length() > 0;
+        return false;
+    }
+    explicit operator std::string() const;
+    friend std::ostream& operator<<(std::ostream& os, const PandaVar& var);
 };
-
-template<typename T>
-NestedProxy& NestedProxy::operator=(const T& val) {
-    std::string newVal = pandac_str(val);
-    cachedValue = newVal;
-    std::string raw = parent->operator std::string();
-    std::string keyPattern = "\"" + childKey + "\":";
-    size_t pos = raw.find(keyPattern);
-
-    if (pos != std::string::npos) {
-        size_t valStart = pos + keyPattern.length();
-        while (valStart < raw.length() && std::isspace(raw[valStart])) valStart++;
-
-        size_t valEnd;
-        if (raw[valStart] == '"') {
-            valEnd = valStart + 1;
-            while (valEnd < raw.length() && (raw[valEnd] != '"' || raw[valEnd-1] == '\\')) valEnd++;
-            if (valEnd < raw.length()) valEnd++;
-        } else {
-            valEnd = raw.find_first_of(",}", valStart);
-        }
-        if (valEnd == std::string::npos) valEnd = raw.length();
-
-        std::string updated = raw.substr(0, valStart) + newVal + raw.substr(valEnd);
-        *parent = updated;
-    }
-    return *this;
-}
-
-inline int operator-(const PandaCDictProxy& lhs, const PandaCDictProxy& rhs) { return (int)lhs - (int)rhs; }
-inline int operator+(const PandaCDictProxy& lhs, const PandaCDictProxy& rhs) { return (int)lhs + (int)rhs; }
-inline int operator*(const PandaCDictProxy& lhs, const PandaCDictProxy& rhs) { return (int)lhs * (int)rhs; }
-inline int operator/(const PandaCDictProxy& lhs, const PandaCDictProxy& rhs) { return (int)lhs / (int)rhs; }
-
-inline int operator-(const PandaCDictProxy& lhs, int rhs) { return (int)lhs - rhs; }
-inline int operator-(int lhs, const PandaCDictProxy& rhs) { return lhs - (int)rhs; }
-inline int operator+(const PandaCDictProxy& lhs, int rhs) { return (int)lhs + rhs; }
-inline int operator+(int lhs, const PandaCDictProxy& rhs) { return lhs + (int)rhs; }
-
-inline int operator-(const NestedProxy& lhs, int rhs) { return (int)lhs - rhs; }
-inline int operator-(int lhs, const NestedProxy& rhs) { return lhs - (int)rhs; }
-inline int operator+(const NestedProxy& lhs, int rhs) { return (int)lhs + rhs; }
-inline int operator+(int lhs, const NestedProxy& rhs) { return lhs + (int)rhs; }
-
-inline std::ostream& operator<<(std::ostream& os, const PandaCDictProxy& p) { return os << std::string(p); }
-inline std::ostream& operator<<(std::ostream& os, const NestedProxy& p) { return os << p.cachedValue; }
-inline std::string to_str(const PandaCDictProxy& p) { return std::string(p); }
-inline std::string to_str(const NestedProxy& p) { return unquote(p.cachedValue); }
 
 struct PandaCDict {
-    std::shared_ptr<std::unordered_map<std::string, std::string>> data;
+    std::shared_ptr<std::unordered_map<std::string, PandaVar>> data;
 
-    PandaCDict() : data(std::make_shared<std::unordered_map<std::string, std::string>>()) {}
+    PandaCDict() : data(std::make_shared<std::unordered_map<std::string, PandaVar>>()) {}
 
-    PandaCDict(std::initializer_list<std::pair<std::string, std::string>> init)
-        : data(std::make_shared<std::unordered_map<std::string, std::string>>()) {
+    PandaCDict(std::initializer_list<std::pair<std::string, PandaVar>> init)
+        : data(std::make_shared<std::unordered_map<std::string, PandaVar>>()) {
         for (const auto& p : init) {
             (*data)[p.first] = p.second;
         }
     }
 
-    template <typename T>
-    PandaCDictProxy operator[](const T& key) {
-        return PandaCDictProxy{data, pandac_str(key)};
+    PandaVar& pandac_getitem(const std::string& key) {
+        return (*data)[key];
     }
 };
+
+struct PandaCList {
+    std::shared_ptr<std::vector<PandaVar>> data;
+
+    PandaCList() : data(std::make_shared<std::vector<PandaVar>>()) {}
+
+    PandaCList(std::initializer_list<PandaVar> init)
+        : data(std::make_shared<std::vector<PandaVar>>(init.begin(), init.end())) {}
+
+    PandaVar& pandac_getitem(int index) {
+        return (*data)[index];
+    }
+
+    int length() const {
+        return data->size();
+    }
+};
+
+template<typename K>
+inline PandaVar& PandaVar::pandac_getitem(const K& key) {
+    if (data.type() == typeid(PandaCDict)) {
+        return std::any_cast<PandaCDict>(&data)->pandac_getitem(pandac_str(key));
+    }
+    if (data.type() == typeid(PandaCList)) {
+        return std::any_cast<PandaCList>(&data)->pandac_getitem(pandac_int(key));
+    }
+    throw std::runtime_error("type does not support [index]");
+}
+
+inline int PandaVar::length() const {
+    if (data.type() == typeid(PandaCList)) return std::any_cast<PandaCList>(&data)->length();
+    if (data.type() == typeid(std::string)) return std::any_cast<std::string>(&data)->length();
+    if (data.type() == typeid(PandaCDict)) return std::any_cast<PandaCDict>(&data)->data->size();
+    return 0;
+}
+
+inline std::vector<PandaVar>::iterator PandaVar::begin() {
+    if (data.type() == typeid(PandaCList)) return std::any_cast<PandaCList>(&data)->data->begin();
+    throw std::runtime_error("Type is not iterable");
+}
+inline std::vector<PandaVar>::iterator PandaVar::end() {
+    if (data.type() == typeid(PandaCList)) return std::any_cast<PandaCList>(&data)->data->end();
+    throw std::runtime_error("Type is not iterable");
+}
+inline std::vector<PandaVar>::const_iterator PandaVar::begin() const {
+    if (data.type() == typeid(PandaCList)) return std::any_cast<PandaCList>(&data)->data->begin();
+    throw std::runtime_error("Type is not iterable");
+}
+inline std::vector<PandaVar>::const_iterator PandaVar::end() const {
+    if (data.type() == typeid(PandaCList)) return std::any_cast<PandaCList>(&data)->data->end();
+    throw std::runtime_error("Type is not iterable");
+}
 
 inline std::ostream& operator<<(std::ostream& os, const PandaCDict& d) {
     os << "{";
@@ -415,3 +403,213 @@ inline std::ostream& operator<<(std::ostream& os, const PandaCDict& d) {
     os << "}";
     return os;
 }
+
+inline std::ostream& operator<<(std::ostream& os, const PandaCList& l) {
+    os << "[";
+    bool first = true;
+    for (const auto& item : *l.data) {
+        if (!first) os << ", ";
+        first = false;
+        os << item;
+    }
+    os << "]";
+    return os;
+}
+
+
+inline std::ostream& operator<<(std::ostream& os, const PandaVar& var) {
+    if (var.data.type() == typeid(PandaCList)) return os << std::any_cast<PandaCList>(var.data);
+    if (var.data.type() == typeid(int)) return os << std::any_cast<int>(var.data);
+    if (var.data.type() == typeid(double)) return os << std::any_cast<double>(var.data);
+    if (var.data.type() == typeid(std::string)) return os << std::any_cast<std::string>(var.data);
+    if (var.data.type() == typeid(PandaCDict)) return os << std::any_cast<PandaCDict>(var.data);
+    if (var.data.type() == typeid(bool)) return os << (std::any_cast<bool>(var.data) ? "True" : "False");
+    return os << "<PandaVar::None>";
+}
+
+inline PandaVar::operator std::string() const {
+    if (data.type() == typeid(std::string)) return std::any_cast<std::string>(data);
+    if (data.type() == typeid(int)) return std::to_string(std::any_cast<int>(data));
+    if (data.type() == typeid(double)) return std::to_string(std::any_cast<double>(data));
+    if (data.type() == typeid(PandaCDict)) {
+        std::stringstream ss;
+        ss << std::any_cast<PandaCDict>(data);
+        return ss.str();
+    }
+    if (data.type() == typeid(PandaCList)) {
+        std::stringstream ss;
+        ss << std::any_cast<PandaCList>(data);
+        return ss.str();
+    }
+
+    if (data.type() == typeid(bool)) return std::any_cast<bool>(data) ? "True" : "False";
+    return "";
+}
+
+template<typename T, typename U>
+auto pandac_add(const T& a, const U& b) {
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar> || std::is_same_v<std::decay_t<U>, PandaVar>) {
+        return a + b;
+    } else if constexpr (std::is_constructible_v<std::string, decltype(a)> || std::is_constructible_v<std::string, decltype(b)>) {
+        return pandac_str(a) + pandac_str(b);
+    } else {
+        return a + b;
+    }
+}
+template<typename T, typename U>
+auto pandac_sub(const T& a, const U& b) {
+    return a - b;
+}
+template<typename T, typename U>
+auto pandac_mul(const T& a, const U& b) {
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar> || std::is_same_v<std::decay_t<U>, PandaVar>) {
+        return a * b;
+    } else if constexpr (std::is_constructible_v<std::string, decltype(a)> && std::is_convertible_v<decltype(b), size_t>) {
+        std::string res = "";
+        for (size_t i = 0; i < pandac_int(b); ++i)
+            res += pandac_str(a);
+        return res;
+    } else if constexpr (std::is_convertible_v<decltype(a), size_t> && std::is_constructible_v<std::string, decltype(b)>) {
+        std::string res = "";
+        for (size_t i = 0; i < pandac_int(a); ++i)
+            res += pandac_str(b);
+        return res;
+    } else {
+        return a * b;
+    }
+}
+template<typename T, typename U>
+auto pandac_div(const T& a, const U& b) {
+    return pandac_float(a) / pandac_float(b);
+}
+
+template<typename T, typename U>
+auto pandac_int_div(const T& a, const U& b) {
+    return pandac_int(a) / pandac_int(b);
+}
+
+template<typename T, typename U>
+auto pandac_mod(const T& a, const U& b) {
+    return pandac_int(a) % pandac_int(b);
+}
+template<typename T, typename U>
+auto pandac_and(const T& a, const U& b) {
+    return pandac_bool(a) ? b : a;
+}
+template<typename T, typename U>
+auto pandac_or(const T& a, const U& b) {
+    return pandac_bool(a) ? a : b;
+}
+template<typename T>
+bool pandac_negate(const T& a) {
+    return !pandac_bool(a);
+}
+template<typename T, typename U>
+auto pandac_assign(T&& lhs, const U& rhs) {
+    lhs = rhs;
+    return lhs;
+}
+template<typename T, typename U>
+auto pandac_assign_add(T&& lhs, const U& rhs) {
+    lhs = pandac_add(lhs, rhs);
+    return lhs;
+}
+template<typename T, typename U>
+auto pandac_assign_sub(T&& lhs, const U& rhs) {
+    lhs = pandac_sub(lhs, rhs);
+    return lhs;
+}
+template<typename T, typename U>
+auto pandac_assign_mul(T&& lhs, const U& rhs) {
+    lhs = pandac_mul(lhs, rhs);
+    return lhs;
+}
+template<typename T, typename U>
+auto pandac_assign_div(T&& lhs, const U& rhs) {
+    lhs = pandac_div(lhs, rhs);
+    return lhs;
+}
+template<typename T, typename U>
+auto pandac_assign_int_div(T&& lhs, const U& rhs) {
+    lhs = pandac_int_div(lhs, rhs);
+    return lhs;
+}
+
+template<typename T, typename U>
+auto pandac_assign_mod(T&& lhs, const U& rhs) {
+    lhs = pandac_mod(lhs, rhs);
+    return lhs;
+}
+template<typename T, typename U>
+auto pandac_eq(const T& a, const U& b) {
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar> || std::is_same_v<std::decay_t<U>, PandaVar>) {
+        PandaVar pa(a); PandaVar pb(b);
+        if (pa.data.type() == typeid(std::string) || pb.data.type() == typeid(std::string)) return PandaVar(static_cast<std::string>(pa) == static_cast<std::string>(pb));
+        if (pa.data.type() == typeid(double) || pb.data.type() == typeid(double)) return PandaVar(static_cast<double>(pa) == static_cast<double>(pb));
+        return PandaVar(static_cast<int>(pa) == static_cast<int>(pb));
+    } else if constexpr (std::is_constructible_v<std::string, decltype(a)> && std::is_constructible_v<std::string, decltype(b)>) {
+        return PandaVar(pandac_str(a) == pandac_str(b));
+    } else {
+        return PandaVar(pandac_float(a) == pandac_float(b));
+    }
+}
+
+template<typename T, typename U>
+auto pandac_neq(const T& a, const U& b) {
+    return PandaVar(!pandac_bool(pandac_eq(a, b)));
+}
+
+template<typename T, typename U>
+auto pandac_less(const T& a, const U& b) {
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar> || std::is_same_v<std::decay_t<U>, PandaVar>) {
+        PandaVar pa(a); PandaVar pb(b);
+        if (pa.data.type() == typeid(std::string) && pb.data.type() == typeid(std::string)) return PandaVar(static_cast<std::string>(pa) < static_cast<std::string>(pb));
+        if (pa.data.type() == typeid(double) || pb.data.type() == typeid(double)) return PandaVar(static_cast<double>(pa) < static_cast<double>(pb));
+        return PandaVar(static_cast<int>(pa) < static_cast<int>(pb));
+    } else if constexpr (std::is_constructible_v<std::string, decltype(a)> && std::is_constructible_v<std::string, decltype(b)>) {
+        return PandaVar(pandac_str(a) < pandac_str(b));
+    } else {
+        return PandaVar(pandac_float(a) < pandac_float(b));
+    }
+}
+
+template<typename T, typename U>
+auto pandac_less_eq(const T& a, const U& b) {
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar> || std::is_same_v<std::decay_t<U>, PandaVar>) {
+        PandaVar pa(a); PandaVar pb(b);
+        if (pa.data.type() == typeid(std::string) && pb.data.type() == typeid(std::string)) return PandaVar(static_cast<std::string>(pa) <= static_cast<std::string>(pb));
+        if (pa.data.type() == typeid(double) || pb.data.type() == typeid(double)) return PandaVar(static_cast<double>(pa) <= static_cast<double>(pb));
+        return PandaVar(static_cast<int>(pa) <= static_cast<int>(pb));
+    } else if constexpr (std::is_constructible_v<std::string, decltype(a)> && std::is_constructible_v<std::string, decltype(b)>) {
+        return PandaVar(pandac_str(a) <= pandac_str(b));
+    } else {
+        return PandaVar(pandac_float(a) <= pandac_float(b));
+    }
+}
+
+template<typename T, typename U>
+auto pandac_greater(const T& a, const U& b) {
+    return PandaVar(!pandac_bool(pandac_less_eq(a, b)));
+}
+
+template<typename T, typename U>
+auto pandac_greater_eq(const T& a, const U& b) {
+    return PandaVar(!pandac_bool(pandac_less(a, b)));
+}
+
+
+template<typename T, typename U>
+auto pandac_pow(const T& a, const U& b) {
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar> || std::is_same_v<std::decay_t<U>, PandaVar>) {
+        return PandaVar(std::pow(static_cast<double>(a), static_cast<double>(b)));
+    } else {
+        return std::pow(a, b);
+    }
+}
+inline auto pandac_pow(const PandaVar& a, const PandaVar& b) {
+    return PandaVar(std::pow(static_cast<double>(a), static_cast<double>(b)));
+}
+inline auto pandac_add(const PandaVar& a, const PandaVar& b) { return a + b; }
+inline auto pandac_sub(const PandaVar& a, const PandaVar& b) { return a - b; }
+inline auto pandac_mul(const PandaVar& a, const PandaVar& b) { return a * b; }
+inline auto pandac_div(const PandaVar& a, const PandaVar& b) { return a / b; }

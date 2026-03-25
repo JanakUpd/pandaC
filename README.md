@@ -30,19 +30,38 @@ To get started with PandaC, follow these steps:
 ```PandaC
 using pandaC
 
-def int main():
+def main():
    print("Greetings to the world of PandaC!")
    ```
 2. Working with inputs:
 ```PandaC
 using pandaC
 
-def int main():
-    str name = input("Enter your name: ")
-    print("Hello, " + name)
-    print("Enter a number:", ' ')
-    int num = int(input())
-    print("You entered: " + num)
+def main():
+    print("--- TYPE CONVERSION TEST ---")
+
+    # Строка в число
+    s_num = "125"
+    real_num = int(s_num)
+    real_num += 5
+    print("String to int:", real_num) # Должно быть 130
+
+    # Строка во float
+    pi_str = "3.14"
+    pi_num = float(pi_str)
+    print("String to float:", pi_num)
+
+    # Число в строку
+    age = 20
+    message = "I am " + str(age) + " years old"
+    print("Int to string:", message)
+
+    # Длина строк и массивов
+    name = "Janak"
+    print("Length of name:", len(name))
+
+    arr = [1, 2, 3, 4, 5]
+    print("Length of array:", len(arr))
    ```
 3. Machine Learning Example:
 ```PandaC
