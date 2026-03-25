@@ -205,20 +205,39 @@ std::string Compiler::build(const std::string& code, const std::string& filePath
 
     std::string pathToOutput = filePath.substr(0, filePath.rfind('/')) + "/pandaC_build";
     ensureExists(pathToOutput);
+
     std::string filenameOnly = filePath.substr(filePath.rfind('/'));
     std::string baseName = filenameOnly.substr(0, filenameOnly.rfind('.'));
     std::string outputFile = pathToOutput + baseName;
+    std::string cppFile = outputFile + ".cpp";
 
-    std::ofstream out(outputFile + ".cpp");
+    std::ofstream out(cppFile);
     out << code;
     out.close();
 
-    if (std::system(("g++ -std=c++23 " + outputFile + ".cpp" + " -o " + outputFile).c_str()) != 0) {
-        if (log) Notifier::notifyError(ERROR_TYPE::UNKNOWN_ERROR);
-        throw std::runtime_error("Error while building");
+    std::string cxx_compiler = "g++";
+    if (const char* env_cxx = std::getenv("CXX")) {
+        cxx_compiler = env_cxx;
+    } else {
+#ifdef __APPLE__
+        cxx_compiler = "clang++";
+#endif
     }
+    std::string command = cxx_compiler + " -std=c++23 -O3 -w \"" + cppFile + "\" -o \"" + outputFile + "\"";
+
+    if (log) {
+        Notifier::notifyInfo("Invoking backend C++ compiler: " + cxx_compiler);
+    }
+
+    int result = std::system(command.c_str());
+    if (result != 0) {
+        if (log) Notifier::notifyError(ERROR_TYPE::UNKNOWN_ERROR);
+        throw std::runtime_error("Backend C++ compilation failed with code " + std::to_string(result));
+    }
+
     return outputFile;
 }
+
 void Compiler::execute(const std::string& file, const bool& log) {
 #ifdef _WIN32
     FILE *pipe = _popen(outputFile.c_str(), "r");

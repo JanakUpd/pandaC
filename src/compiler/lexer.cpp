@@ -27,6 +27,10 @@ std::pair<float, float> Lexer::getBindingPower(const std::string &symbol) {
     if (symbol == "[") return {8.0, 0.0};
     if (symbol == "]") return {0.0, 0.0};
     if (symbol == "=") return {0.1, 0.0};
+    if (symbol == "+=") return {0.1, 0.0};
+    if (symbol == "-=") return {0.1, 0.0};
+    if (symbol == "*=") return {0.1, 0.0};
+    if (symbol == "/=") return {0.1, 0.0};
     throw std::invalid_argument("invalid operator: " + symbol);
 }
 
@@ -55,13 +59,18 @@ void Lexer::replace(std::string &str, const std::string &from, const std::string
 Expression Lexer::fromString(std::string input) {
     tokens.clear();
     current_token_index = 0;
+    scope_stack.clear();
+    scope_stack.push_back({});
     std::string current_atom = "";
     auto push_atom = [&]() {
         if (!current_atom.empty()) {
-            if (current_atom == "or" || current_atom == "and" || current_atom == "not")
+            if (current_atom.front() == '"' && current_atom.back() == '"') {
+                tokens.push_back(Token{TokenType::String, current_atom});
+            } else if (current_atom == "or" || current_atom == "and" || current_atom == "not") {
                 tokens.push_back(Token{TokenType::Operator, current_atom});
-            else
+            } else {
                 tokens.push_back(Token{TokenType::Atom, current_atom});
+            }
             current_atom = "";
         }
     };
@@ -107,6 +116,15 @@ Expression Lexer::fromString(std::string input) {
             current_line_indent = 0;
             continue;
         }
+        if (c == '"') {
+            inQuote = !inQuote;
+            current_atom += c;
+            continue;
+        }
+        if (inQuote) {
+            current_atom += c;
+            continue;
+        }
         if (!inQuote && c == '<') {
             bool isType = false;
             if (!current_atom.empty()) {
@@ -145,7 +163,8 @@ Expression Lexer::fromString(std::string input) {
             tokens.push_back(Token{TokenType::Operator, "="});
             continue;
         }
-        if ((c == '=' || c == '!' || c == '<' || c == '>') && i + 1 < input.length() && input[i + 1] == '=') {
+        if ((c == '=' || c == '!' || c == '<' || c == '>' || c == '+' || c == '-' || c == '*' || c == '/') && i + 1 <
+            input.length() && input[i + 1] == '=') {
             push_atom();
             tokens.push_back(Token{TokenType::Operator, std::string(1, c) + "="});
             ++i;
@@ -154,16 +173,6 @@ Expression Lexer::fromString(std::string input) {
         if (c == '>' || c == '<') {
             push_atom();
             tokens.push_back(Token{TokenType::Operator, std::string(1, c)});
-            continue;
-        }
-
-        if (c == '"') {
-            inQuote = !inQuote;
-            current_atom += c;
-            continue;
-        }
-        if (inQuote) {
-            current_atom += c;
             continue;
         }
         if (std::isspace(c)) {
@@ -176,16 +185,21 @@ Expression Lexer::fromString(std::string input) {
             ++i;
             continue;
         }
-        if (c == '+' || c == '-' || c == '*' || c == '/' || c == '(' || c == ')' || c == ',' || c == '.' || c == '[' ||
-            c == ']' || c == ':') {
+        if (c == '+' || c == '-' || c == '*' || c == '/' ||
+            c == '(' || c == ')' ||
+            c == '[' || c == ']' ||
+            c == '{' || c == '}' ||
+            c == ',' || c == '.' || c == ':') {
             push_atom();
             tokens.push_back(Token{TokenType::Operator, std::string(1, c)});
             continue;
         }
 
+
         current_atom += c;
     }
     push_atom();
+
 
     while (indent_stack.back() > 0) {
         indent_stack.pop_back();
@@ -204,46 +218,115 @@ Expression Lexer::fromString(std::string input) {
     return Expression{Program{std::move(program_statements)}, nullptr, nullptr};
 }
 
-std::string Lexer::astToString(const Expression &expr) {
-    if (std::holds_alternative<Atom>(expr.value))
-        return std::get<Atom>(expr.value).name;
+template<class... Ts>
+struct overloaded : Ts... {
+    using Ts::operator()...;
+};
 
-    if (std::holds_alternative<Operator>(expr.value)) {
-        std::string op = std::get<Operator>(expr.value).symbol;
-        if (!expr.lhs && expr.rhs)
-            return "(" + op + " " + astToString(*expr.rhs) + ")";
-        if (expr.lhs && expr.rhs)
-            return "(" + op + " " + astToString(*expr.lhs) + " " + astToString(*expr.rhs) + ")";
-    } else if (std::holds_alternative<FunctionCall>(expr.value)) {
-        const auto &func = std::get<FunctionCall>(expr.value);
-        std::string result = "(call " + astToString(*func.target);
-        for (const auto &arg: func.arguments)
-            result += " " + astToString(*arg);
-        result += ")";
-        return result;
-    } else if (std::holds_alternative<ArrayLiteral>(expr.value)) {
-        const auto &arr = std::get<ArrayLiteral>(expr.value);
-        std::string result = "[";
-        for (size_t i = 0; i < arr.elements.size(); ++i) {
-            result += astToString(*arr.elements[i]);
-            if (i < arr.elements.size() - 1) result += " ";
-        }
-        result += "]";
-        return result;
-    } else if (std::holds_alternative<IndexAccess>(expr.value)) {
-        const auto &idx = std::get<IndexAccess>(expr.value);
-        return "(index " + astToString(*idx.array_expr) + " " + astToString(*idx.index_expr) + ")";
-    } else if (std::holds_alternative<VarDeclaration>(expr.value)) {
-        const auto &decl = std::get<VarDeclaration>(expr.value);
-        std::string result = "(var " + decl.type_name + " " + decl.var_name;
-        if (decl.value) {
-            result += " " + astToString(*decl.value);
-        }
-        result += ")";
-        return result;
-    }
-    return "UNKNOWN";
+template<class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
+
+std::string Lexer::astToString(const Expression &expr) {
+    return std::visit(overloaded{
+                          [](const Atom &atom) -> std::string {
+                              return atom.name;
+                          },
+                          [](const StringLiteral &str) -> std::string {
+                              return str.value;
+                          },
+                          [&](const DictLiteral &dict) -> std::string {
+                              std::string result = "{";
+                              for (size_t i = 0; i < dict.elements.size(); ++i) {
+                                  result += astToString(*dict.elements[i].first) + ": " + astToString(
+                                      *dict.elements[i].second);
+                                  if (i < dict.elements.size() - 1) result += ", ";
+                              }
+                              result += "}";
+                              return result;
+                          },
+                          [&](const Operator &op_val) -> std::string {
+                              std::string op = op_val.symbol;
+                              if (!expr.lhs && expr.rhs)
+                                  return "(" + op + " " + astToString(*expr.rhs) + ")";
+                              if (expr.lhs && expr.rhs)
+                                  return "(" + op + " " + astToString(*expr.lhs) + " " + astToString(*expr.rhs) + ")";
+                              return "(" + op + ")";
+                          },
+                          [&](const FunctionCall &func) -> std::string {
+                              std::string result = "(call " + astToString(*func.target);
+                              for (const auto &arg: func.arguments)
+                                  result += " " + astToString(*arg);
+                              result += ")";
+                              return result;
+                          },
+                          [&](const ArrayLiteral &arr) -> std::string {
+                              std::string result = "[";
+                              for (size_t i = 0; i < arr.elements.size(); ++i) {
+                                  result += astToString(*arr.elements[i]);
+                                  if (i < arr.elements.size() - 1) result += " ";
+                              }
+                              result += "]";
+                              return result;
+                          },
+                          [&](const IndexAccess &idx) -> std::string {
+                              return "(index " + astToString(*idx.array_expr) + " " + astToString(*idx.index_expr) +
+                                     ")";
+                          },
+                          [&](const VarDeclaration &decl) -> std::string {
+                              std::string result = "(var " + decl.type_name + " " + decl.var_name;
+                              if (decl.value) {
+                                  result += " " + astToString(*decl.value);
+                              }
+                              result += ")";
+                              return result;
+                          },
+                          [&](const Block &block) -> std::string {
+                              std::string result = "(block";
+                              for (const auto &stmt: block.statements)
+                                  result += " " + astToString(*stmt);
+                              result += ")";
+                              return result;
+                          },
+                          [&](const Program &prog) -> std::string {
+                              std::string result = "(program";
+                              for (const auto &stmt: prog.statements)
+                                  result += " " + astToString(*stmt);
+                              result += ")";
+                              return result;
+                          },
+                          [&](const WhileStatement &w_stmt) -> std::string {
+                              return "(while " + astToString(*w_stmt.condition) + " " + astToString(*w_stmt.body) + ")";
+                          },
+                          [&](const ForStatement &f_stmt) -> std::string {
+                              return "(for " + f_stmt.iterator_name + " " + astToString(*f_stmt.collection) + " " +
+                                     astToString(*f_stmt.body) + ")";
+                          },
+                          [&](const IfStatement &if_stmt) -> std::string {
+                              std::string result = "(if " + astToString(*if_stmt.condition) + " " + astToString(
+                                                       *if_stmt.body);
+                              if (if_stmt.else_body) result += " else " + astToString(*if_stmt.else_body);
+                              result += ")";
+                              return result;
+                          },
+                          [&](const FunctionDeclaration &func) -> std::string {
+                              std::string result = "(def " + func.return_type + " " + func.name + " (args";
+                              for (const auto &arg: func.args) result += " " + arg.type + ":" + arg.name;
+                              result += ") " + astToString(*func.body) + ")";
+                              return result;
+                          },
+                          [&](const ReturnStatement &ret) -> std::string {
+                              if (ret.value) return "(return " + astToString(*ret.value) + ")";
+                              return "(return)";
+                          },
+                          [](const UsingStatement &use_stmt) -> std::string {
+                              return "(using " + use_stmt.lib_name + ")";
+                          },
+                          [](auto &&) -> std::string {
+                              return "UNKNOWN";
+                          }
+                      }, expr.value);
 }
+
 
 static std::string getIndent(int level) {
     return std::string(level * 4, ' ');
@@ -251,230 +334,252 @@ static std::string getIndent(int level) {
 
 std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                                const std::vector<Compiler::TypeBinder> *typeBinders) {
-    if (std::holds_alternative<Atom>(expr.value)) {
-        return std::get<Atom>(expr.value).name;
-    } else if (std::holds_alternative<Block>(expr.value)) {
-        const auto &block = std::get<Block>(expr.value);
-        std::string result = "{\n";
-        for (const auto &stmt: block.statements) {
-            std::string stmt_str = toCppString(*stmt, indentLevel + 1, typeBinders);
-            if (stmt_str.empty()) continue;
+    return std::visit(overloaded{
+                          [&](const Atom &atom) -> std::string {
+                              if (atom.name == "True") return "true";
+                              if (atom.name == "False") return "false";
+                              if (atom.name == "None") return "nullptr";
+                              return atom.name;
+                          },
+                          [&](const StringLiteral &str) -> std::string {
+                              return "std::string(" + str.value + ")";
+                          },
+                          [&](const Block &block) -> std::string {
+                              std::string result = "{\n";
+                              for (const auto &stmt: block.statements) {
+                                  std::string stmt_str = toCppString(*stmt, indentLevel + 1, typeBinders);
+                                  if (stmt_str.empty()) continue;
 
-            result += getIndent(indentLevel + 1) + stmt_str;
-            if (!std::holds_alternative<FunctionDeclaration>(stmt->value) &&
-                !std::holds_alternative<IfStatement>(stmt->value) &&
-                !std::holds_alternative<ForStatement>(stmt->value) &&
-                !std::holds_alternative<UsingStatement>(stmt->value) &&
-                stmt_str.back() != '\n') {
-                result += ";\n";
-            } else {
-                result += "\n";
-            }
-        }
-        result += getIndent(indentLevel) + "}";
-        return result;
-    } else if (std::holds_alternative<UsingStatement>(expr.value)) {
-        const auto &use_stmt = std::get<UsingStatement>(expr.value);
-        return "// using " + use_stmt.lib_name;
-    } else if (std::holds_alternative<FunctionDeclaration>(expr.value)) {
-        const auto &func = std::get<FunctionDeclaration>(expr.value);
-        std::string result = "";
+                                  result += getIndent(indentLevel + 1) + stmt_str;
 
-        std::string cpp_ret_type = func.return_type;
-        if (func.name == "main") {
-            cpp_ret_type = "int";
-        } else if (typeBinders != nullptr && cpp_ret_type != "void" && cpp_ret_type != "int") {
-            for (const auto &item: *typeBinders) {
-                if (item.pandacName.empty()) continue;
-                size_t pos = 0;
-                bool isCompound = item.pandacName.find('<') != std::string::npos;
-                while ((pos = cpp_ret_type.find(item.pandacName, pos)) != std::string::npos) {
-                    bool leftOk = (pos == 0 || (!std::isalnum(cpp_ret_type[pos - 1]) && cpp_ret_type[pos - 1] != '_'));
-                    bool rightOk = (pos + item.pandacName.size() >= cpp_ret_type.size() ||
-                                    (!std::isalnum(cpp_ret_type[pos + item.pandacName.size()]) && cpp_ret_type[
-                                         pos + item.pandacName.size()] != '_'));
-                    if (isCompound || (leftOk && rightOk)) {
-                        cpp_ret_type.replace(pos, item.pandacName.size(), item.cppName);
-                        pos += item.cppName.size();
-                    } else {
-                        pos += item.pandacName.size();
-                    }
-                }
-            }
-        }
+                                  if (!std::holds_alternative<FunctionDeclaration>(stmt->value) &&
+                                      !std::holds_alternative<IfStatement>(stmt->value) &&
+                                      !std::holds_alternative<WhileStatement>(stmt->value) &&
+                                      !std::holds_alternative<ForStatement>(stmt->value) &&
+                                      !std::holds_alternative<UsingStatement>(stmt->value) &&
+                                      stmt_str.back() != '\n') {
+                                      result += ";\n";
+                                  } else {
+                                      result += "\n";
+                                  }
+                              }
+                              result += getIndent(indentLevel) + "}";
+                              return result;
+                          },
+                          [&](const DictLiteral &dict) -> std::string {
+                              std::string result = "PandaCDict{";
+                              for (size_t i = 0; i < dict.elements.size(); ++i) {
+                                  result += "{" + toCppString(*dict.elements[i].first, indentLevel, typeBinders) +
+                                          ", pandac_str(" + toCppString(*dict.elements[i].second, indentLevel,
+                                                                        typeBinders) + ")}";
+                                  if (i < dict.elements.size() - 1) result += ", ";
+                              }
+                              result += "}";
+                              return result;
+                          },
 
-        result += getIndent(indentLevel) + cpp_ret_type + " " + func.name + "(";
+                          [&](const UsingStatement &use_stmt) -> std::string {
+                              return "// using " + use_stmt.lib_name;
+                          },
+                          [&](const FunctionDeclaration &func) -> std::string {
+                              std::string cpp_ret_type = func.return_type;
+                              if (func.name == "main") {
+                                  cpp_ret_type = "int";
+                              } else if (typeBinders != nullptr && cpp_ret_type != "void" && cpp_ret_type != "int") {
+                                  for (const auto &item: *typeBinders) {
+                                      if (item.pandacName.empty()) continue;
+                                      size_t pos = 0;
+                                      bool isCompound = item.pandacName.find('<') != std::string::npos;
+                                      while ((pos = cpp_ret_type.find(item.pandacName, pos)) != std::string::npos) {
+                                          bool leftOk = (
+                                              pos == 0 || (
+                                                  !std::isalnum(cpp_ret_type[pos - 1]) && cpp_ret_type[pos - 1] !=
+                                                  '_'));
+                                          bool rightOk = (pos + item.pandacName.size() >= cpp_ret_type.size() ||
+                                                          (!std::isalnum(cpp_ret_type[pos + item.pandacName.size()]) &&
+                                                           cpp_ret_type[pos + item.pandacName.size()] != '_'));
+                                          if (isCompound || (leftOk && rightOk)) {
+                                              cpp_ret_type.replace(pos, item.pandacName.size(), item.cppName);
+                                              pos += item.cppName.size();
+                                          } else pos += item.pandacName.size();
+                                      }
+                                  }
+                              }
 
-        for (size_t i = 0; i < func.args.size(); ++i) {
-            std::string arg_type = func.args[i].type;
-            if (typeBinders != nullptr && arg_type != "auto") {
-                for (const auto &item: *typeBinders) {
-                    if (item.pandacName.empty()) continue;
-                    size_t pos = 0;
-                    bool isCompound = item.pandacName.find('<') != std::string::npos;
-                    while ((pos = arg_type.find(item.pandacName, pos)) != std::string::npos) {
-                        bool leftOk = (pos == 0 || (!std::isalnum(arg_type[pos - 1]) && arg_type[pos - 1] != '_'));
-                        bool rightOk = (pos + item.pandacName.size() >= arg_type.size() ||
-                                        (!std::isalnum(arg_type[pos + item.pandacName.size()]) && arg_type[
-                                             pos + item.pandacName.size()] != '_'));
-                        if (isCompound || (leftOk && rightOk)) {
-                            arg_type.replace(pos, item.pandacName.size(), item.cppName);
-                            pos += item.cppName.size();
-                        } else
-                            pos += item.pandacName.size();
-                    }
-                }
-            }
+                              std::string result = getIndent(indentLevel) + cpp_ret_type + " " + func.name + "(";
+                              for (size_t i = 0; i < func.args.size(); ++i) {
+                                  std::string arg_type = func.args[i].type;
+                                  if (typeBinders != nullptr && arg_type != "auto") {
+                                      for (const auto &item: *typeBinders) {
+                                          if (item.pandacName.empty()) continue;
+                                          size_t pos = 0;
+                                          bool isCompound = item.pandacName.find('<') != std::string::npos;
+                                          while ((pos = arg_type.find(item.pandacName, pos)) != std::string::npos) {
+                                              bool leftOk = (
+                                                  pos == 0 || (
+                                                      !std::isalnum(arg_type[pos - 1]) && arg_type[pos - 1] != '_'));
+                                              bool rightOk = (pos + item.pandacName.size() >= arg_type.size() ||
+                                                              (!std::isalnum(arg_type[pos + item.pandacName.size()]) &&
+                                                               arg_type[pos + item.pandacName.size()] != '_'));
+                                              if (isCompound || (leftOk && rightOk)) {
+                                                  arg_type.replace(pos, item.pandacName.size(), item.cppName);
+                                                  pos += item.cppName.size();
+                                              } else pos += item.pandacName.size();
+                                          }
+                                      }
+                                  }
+                                  result += arg_type + " " + func.args[i].name;
+                                  if (i < func.args.size() - 1) result += ", ";
+                              }
+                              result += ") \n" + getIndent(indentLevel) + toCppString(
+                                  *func.body, indentLevel, typeBinders);
+                              return result;
+                          },
+                          [&](const Program &prog) -> std::string {
+                              std::string result = "";
+                              for (const auto &stmt: prog.statements) {
+                                  std::string stmt_str = toCppString(*stmt, indentLevel, typeBinders);
+                                  if (stmt_str.empty()) continue;
 
-            result += arg_type + " " + func.args[i].name;
-            if (i < func.args.size() - 1) result += ", ";
-        }
+                                  result += stmt_str;
+                                  if (!std::holds_alternative<FunctionDeclaration>(stmt->value) &&
+                                      !std::holds_alternative<IfStatement>(stmt->value) &&
+                                      !std::holds_alternative<WhileStatement>(stmt->value) &&
+                                      !std::holds_alternative<UsingStatement>(stmt->value) &&
+                                      !std::holds_alternative<ForStatement>(stmt->value) &&
+                                      stmt_str.back() != '}' && stmt_str.back() != '\n') {
+                                      result += ";\n";
+                                  } else {
+                                      result += "\n";
+                                  }
+                              }
+                              return result;
+                          },
+                          [&](const WhileStatement &while_stmt) -> std::string {
+                              return "while (" + toCppString(*while_stmt.condition, 0, typeBinders) + ") \n" +
+                                     getIndent(indentLevel) + toCppString(*while_stmt.body, indentLevel, typeBinders);
+                          },
+                          [&](const IfStatement &if_stmt) -> std::string {
+                              std::string cond_str = toCppString(*if_stmt.condition, 0, typeBinders);
+                              std::string result = (!cond_str.empty() && cond_str.front() == '(' && cond_str.back() ==
+                                                    ')')
+                                                       ? "if " + cond_str + " \n"
+                                                       : "if (" + cond_str + ") \n";
 
-        result += ") \n";
+                              result += getIndent(indentLevel) + toCppString(*if_stmt.body, indentLevel, typeBinders);
 
-        result += getIndent(indentLevel) + toCppString(*func.body, indentLevel, typeBinders);
-        return result;
-    } else if (std::holds_alternative<Program>(expr.value)) {
-        const auto &prog = std::get<Program>(expr.value);
-        std::string result = "";
-        for (const auto &stmt: prog.statements) {
-            std::string stmt_str = toCppString(*stmt, indentLevel, typeBinders);
-            if (stmt_str.empty()) continue;
+                              if (if_stmt.else_body) {
+                                  if (std::holds_alternative<IfStatement>(if_stmt.else_body->value)) {
+                                      result += " else " + toCppString(*if_stmt.else_body, indentLevel, typeBinders);
+                                  } else {
+                                      result += " else \n" + getIndent(indentLevel) + toCppString(
+                                          *if_stmt.else_body, indentLevel, typeBinders);
+                                  }
+                              }
+                              return result;
+                          },
+                          [&](const ForStatement &for_stmt) -> std::string {
+                              return "for (auto " + for_stmt.iterator_name + " : " + toCppString(
+                                         *for_stmt.collection, 0, typeBinders) + ") \n" +
+                                     getIndent(indentLevel) + toCppString(*for_stmt.body, indentLevel, typeBinders);
+                          },
+                          [&](const Operator &op_val) -> std::string {
+                              std::string op = op_val.symbol;
+                              if (op == "=" || op == "+=" || op == "-=" || op == "*=" || op == "/=")
+                                  return toCppString(*expr.lhs, indentLevel, typeBinders) + " " + op + " " +
+                                         toCppString(*expr.rhs, indentLevel, typeBinders);
 
-            result += stmt_str;
-            if (!std::holds_alternative<FunctionDeclaration>(stmt->value) &&
-                !std::holds_alternative<IfStatement>(stmt->value) &&
-                !std::holds_alternative<UsingStatement>(stmt->value) &&
-                !std::holds_alternative<ForStatement>(stmt->value) &&
-                stmt_str.back() != '}' && stmt_str.back() != '\n') {
-                result += ";\n";
-            } else {
-                result += "\n";
-            }
-        }
-        return result;
-    }
-    else if (std::holds_alternative<WhileStatement>(expr.value)) {
-        const auto& while_stmt = std::get<WhileStatement>(expr.value);
-        std::string result = "while (" + toCppString(*while_stmt.condition, 0, typeBinders) + ") \n";
-        result += getIndent(indentLevel) + toCppString(*while_stmt.body, indentLevel, typeBinders);
-        return result;
-    }
-    else if (std::holds_alternative<IfStatement>(expr.value)) {
-        const auto &if_stmt = std::get<IfStatement>(expr.value);
+                              if (op == ".")
+                                  return
+                                          toCppString(*expr.lhs, indentLevel, typeBinders) + "." + toCppString(
+                                              *expr.rhs, indentLevel, typeBinders);
 
-        std::string cond_str = toCppString(*if_stmt.condition, 0, typeBinders);
-        std::string result = "";
-        if (!cond_str.empty() && cond_str.front() == '(' && cond_str.back() == ')')
-            result = "if " + cond_str + " \n";
-        else
-            result = "if (" + cond_str + ") \n";
+                              if (op == "and") op = "&&";
+                              else if (op == "or") op = "||";
+                              else if (op == "not") op = "!";
 
-        result += getIndent(indentLevel) + toCppString(*if_stmt.body, indentLevel, typeBinders);
+                              if (!expr.lhs && expr.rhs)
+                                  return "(" + op + toCppString(*expr.rhs, indentLevel, typeBinders) + ")";
+                              if (op == "**")
+                                  return "std::pow(" + toCppString(*expr.lhs, indentLevel, typeBinders) + ", " +
+                                         toCppString(*expr.rhs, indentLevel, typeBinders) + ")";
+                              if (expr.lhs && expr.rhs)
+                                  return "(" + toCppString(*expr.lhs, indentLevel, typeBinders) + " " + op + " " +
+                                         toCppString(*expr.rhs, indentLevel, typeBinders) + ")";
 
-        if (if_stmt.else_body) {
-            if (std::holds_alternative<IfStatement>(if_stmt.else_body->value)) {
-                result += " else " + toCppString(*if_stmt.else_body, indentLevel, typeBinders);
-            } else {
-                result += " else \n";
-                result += getIndent(indentLevel) + toCppString(*if_stmt.else_body, indentLevel, typeBinders);
-            }
-        }
+                              return "";
+                          },
+                          [&](const FunctionCall &func) -> std::string {
+                              std::string target_name = toCppString(*func.target, indentLevel, typeBinders);
 
-        return result;
-    } else if (std::holds_alternative<ForStatement>(expr.value)) {
-        const auto &for_stmt = std::get<ForStatement>(expr.value);
-        std::string result = "for (auto " + for_stmt.iterator_name + " : " + toCppString(
-                                 *for_stmt.collection, 0, typeBinders) + ") \n";
-        result += getIndent(indentLevel) + toCppString(*for_stmt.body, indentLevel, typeBinders);
-        return result;
-    } else if (std::holds_alternative<Operator>(expr.value)) {
-        std::string op = std::get<Operator>(expr.value).symbol;
-        if (op == "=")
-            return toCppString(*expr.lhs, indentLevel, typeBinders) + " = " + toCppString(
-                       *expr.rhs, indentLevel, typeBinders);
-        if (op == ".")
-            return toCppString(*expr.lhs, indentLevel, typeBinders) + "." + toCppString(
-                       *expr.rhs, indentLevel, typeBinders);
-        else if (op == "and") op = "&&";
-        else if (op == "or") op = "||";
-        else if (op == "not") op = "!";
-        if (!expr.lhs && expr.rhs)
-            return "(" + op + toCppString(*expr.rhs, indentLevel, typeBinders) + ")";
-        if (op == "**")
-            return "std::pow(" + toCppString(*expr.lhs, indentLevel, typeBinders) + ", " + toCppString(
-                       *expr.rhs, indentLevel, typeBinders) + ")";
-        if (expr.lhs && expr.rhs)
-            return "(" + toCppString(*expr.lhs, indentLevel, typeBinders) + " " + op + " " + toCppString(
-                       *expr.rhs, indentLevel, typeBinders) + ")";
-    } else if (std::holds_alternative<FunctionCall>(expr.value)) {
-        const auto &func = std::get<FunctionCall>(expr.value);
-        std::string result = toCppString(*func.target, indentLevel, typeBinders) + "(";
+                              if (target_name == "str") target_name = "pandac_str";
+                              else if (target_name == "int") target_name = "pandac_int";
+                              else if (target_name == "float") target_name = "pandac_float";
+                              else if (target_name == "bool") target_name = "pandac_bool";
+                              else if (target_name == "len") target_name = "pandac_len";
+                              else if (target_name == "print") target_name = "pandac_print";
 
-        for (size_t i = 0; i < func.arguments.size(); ++i) {
-            result += toCppString(*func.arguments[i], indentLevel, typeBinders);
-            if (i < func.arguments.size() - 1) {
-                result += ", ";
-            }
-        }
-        result += ")";
-        return result;
-    } else if (std::holds_alternative<ReturnStatement>(expr.value)) {
-        const auto &ret = std::get<ReturnStatement>(expr.value);
-        if (ret.value)
-            return "return " + toCppString(*ret.value, indentLevel, typeBinders) + ";\n";
-        else
-            return "return;\n";
-    } else if (std::holds_alternative<ArrayLiteral>(expr.value)) {
-        const auto &arr = std::get<ArrayLiteral>(expr.value);
-        std::string result = "{";
-        for (size_t i = 0; i < arr.elements.size(); ++i) {
-            result += toCppString(*arr.elements[i], indentLevel, typeBinders);
-            if (i < arr.elements.size() - 1) {
-                result += ", ";
-            }
-        }
-        result += "}";
-        return result;
-    } else if (std::holds_alternative<VarDeclaration>(expr.value)) {
-        const auto &decl = std::get<VarDeclaration>(expr.value);
-        std::string result;
+                              std::string result = target_name + "(";
+                              for (size_t i = 0; i < func.arguments.size(); ++i) {
+                                  result += toCppString(*func.arguments[i], indentLevel, typeBinders);
+                                  if (i < func.arguments.size() - 1) result += ", ";
+                              }
+                              result += ")";
+                              return result;
+                          },
+                          [&](const ReturnStatement &ret) -> std::string {
+                              if (ret.value)
+                                  return
+                                          "return " + toCppString(*ret.value, indentLevel, typeBinders) + ";\n";
+                              return "return;\n";
+                          },
+                          [&](const ArrayLiteral &arr) -> std::string {
+                              std::string result = "{";
+                              for (size_t i = 0; i < arr.elements.size(); ++i) {
+                                  result += toCppString(*arr.elements[i], indentLevel, typeBinders);
+                                  if (i < arr.elements.size() - 1) result += ", ";
+                              }
+                              result += "}";
+                              return result;
+                          },
+                          [&](const VarDeclaration &decl) -> std::string {
+                              std::string cpp_type = decl.type_name;
+                              if (typeBinders != nullptr) {
+                                  for (const auto &item: *typeBinders) {
+                                      if (item.pandacName.empty()) continue;
+                                      size_t pos = 0;
+                                      bool isCompound = item.pandacName.find('<') != std::string::npos;
 
-        std::string cpp_type = decl.type_name;
-        if (typeBinders != nullptr) {
-            for (const auto &item: *typeBinders) {
-                if (item.pandacName.empty()) continue;
-                size_t pos = 0;
-                bool isCompound = item.pandacName.find('<') != std::string::npos;
+                                      while ((pos = cpp_type.find(item.pandacName, pos)) != std::string::npos) {
+                                          bool leftOk = (
+                                              pos == 0 || (
+                                                  !std::isalnum(cpp_type[pos - 1]) && cpp_type[pos - 1] != '_'));
+                                          bool rightOk = (pos + item.pandacName.size() >= cpp_type.size() ||
+                                                          (!std::isalnum(cpp_type[pos + item.pandacName.size()]) &&
+                                                           cpp_type[pos + item.pandacName.size()] != '_'));
 
-                while ((pos = cpp_type.find(item.pandacName, pos)) != std::string::npos) {
-                    bool leftOk = (pos == 0 || (!std::isalnum(cpp_type[pos - 1]) && cpp_type[pos - 1] != '_'));
-                    bool rightOk = (pos + item.pandacName.size() >= cpp_type.size() ||
-                                    (!std::isalnum(cpp_type[pos + item.pandacName.size()]) && cpp_type[
-                                         pos + item.pandacName.size()] != '_'));
+                                          if (isCompound || (leftOk && rightOk)) {
+                                              cpp_type.replace(pos, item.pandacName.size(), item.cppName);
+                                              pos += item.cppName.size();
+                                          } else pos += item.pandacName.size();
+                                      }
+                                  }
+                              }
 
-                    if (isCompound || (leftOk && rightOk)) {
-                        cpp_type.replace(pos, item.pandacName.size(), item.cppName);
-                        pos += item.cppName.size();
-                    } else
-                        pos += item.pandacName.size();
-                }
-            }
-        }
-
-        result = cpp_type + " " + decl.var_name;
-
-        if (decl.value) {
-            result += " = " + toCppString(*decl.value, indentLevel, typeBinders);
-        }
-
-        return result;
-    } else if (std::holds_alternative<IndexAccess>(expr.value)) {
-        const auto &idx = std::get<IndexAccess>(expr.value);
-        return toCppString(*idx.array_expr, indentLevel, typeBinders) + "[" + toCppString(
-                   *idx.index_expr, indentLevel, typeBinders) + "]";
-    }
-    return "";
+                              std::string result = cpp_type + " " + decl.var_name;
+                              if (decl.value) {
+                                  result += " = " + toCppString(*decl.value, indentLevel, typeBinders);
+                              }
+                              return result;
+                          },
+                          [&](const IndexAccess &idx) -> std::string {
+                              return toCppString(*idx.array_expr, indentLevel, typeBinders) + "[" + toCppString(
+                                         *idx.index_expr, indentLevel, typeBinders) + "]";
+                          },
+                          [&](auto &&) -> std::string {
+                              return "/* UNHANDLED AST NODE */";
+                          }
+                      }, expr.value);
 }
 
 Expression Lexer::parseStatement() {
@@ -535,7 +640,7 @@ Expression Lexer::parseStatement() {
         consume();
 
         Token first_token = consume();
-        std::string return_type = "void";
+        std::string return_type = "auto";
         std::string func_name = first_token.lexeme;
 
         if (peek().lexeme != "(") {
@@ -580,9 +685,13 @@ Expression Lexer::parseStatement() {
 
         if (peek().type != TokenType::Indent)
             throw std::invalid_argument("Expected an indented block after 'def'");
+        enterScope();
+        for (const auto &arg: args) {
+            declareVar(arg.name);
+        }
         consume();
         ExprPtr body = std::make_unique<Expression>(parseBlock());
-
+        exitScope();
         if (peek().type == TokenType::Dedent)
             consume();
         while (peek().type == TokenType::Newline) consume();
@@ -647,8 +756,6 @@ Expression Lexer::parseStatement() {
                     break;
                 }
             } else {
-                std::cout << "BREAKING IF. NEXT TOKEN: " << peek().lexeme
-                        << " TYPE: " << (int) peek().type << std::endl;
                 break;
             }
         }
@@ -662,63 +769,82 @@ Expression Lexer::parseStatement() {
             consume();
 
         return Expression{ReturnStatement{std::move(ret_val)}, nullptr, nullptr};
-    } else if (first.type == TokenType::Atom) {
-        if (current_token_index + 1 < tokens.size()) {
-            Token second = tokens[current_token_index + 1];
-            if (second.type == TokenType::Atom) {
-                consume();
-                consume();
-                std::string type_name = first.lexeme;
-                std::string var_name = second.lexeme;
-                ExprPtr init_value = nullptr;
-                if (peek().lexeme == "=") {
-                    consume();
-                    init_value = std::make_unique<Expression>(parseExpression(0.0));
-                }
-                while (peek().type == TokenType::Newline)
-                    consume();
-                if (peek().type == TokenType::Newline) consume();
-                return Expression{VarDeclaration{type_name, var_name, std::move(init_value)}, nullptr, nullptr};
+    } else if (first.type == TokenType::Atom || first.type == TokenType::Operator) {
+        if (first.type == TokenType::Operator) {
+            bool isValidStart = (first.lexeme == "(" || first.lexeme == "{" ||
+                                 first.lexeme == "[" || first.lexeme == "-" ||
+                                 first.lexeme == "not" || first.lexeme == "+");
+
+            if (!isValidStart) {
+                throw std::invalid_argument("Syntax error: Statement cannot start with operator '" + first.lexeme + "' (Variables missing?)");
             }
         }
-    } else if (first.type == TokenType::Atom) {
-        bool is_var_decl = false;
-        bool is_assignment = false;
 
-        if (current_token_index + 2 < tokens.size() &&
-            tokens[current_token_index + 1].type == TokenType::Atom &&
-            tokens[current_token_index + 2].lexeme == "=") {
-            is_var_decl = true;
-            } else if (current_token_index + 1 < tokens.size() &&
-                       tokens[current_token_index + 1].lexeme == "=") {
-                is_assignment = true;
-                       }
+        size_t saved_index = current_token_index;
 
-        if (is_var_decl) {
+        bool is_typed_decl = false;
+        if (current_token_index + 2 < tokens.size()) {
+            if (tokens[current_token_index + 1].type == TokenType::Atom &&
+                tokens[current_token_index + 2].lexeme == "=") {
+                is_typed_decl = true;
+            }
+        }
+
+        if (is_typed_decl) {
             Token type_tok = consume();
             Token var_tok = consume();
             consume();
             ExprPtr init_value = std::make_unique<Expression>(parseExpression(0.0));
             while (peek().type == TokenType::Newline) consume();
             return Expression{VarDeclaration{type_tok.lexeme, var_tok.lexeme, std::move(init_value)}, nullptr, nullptr};
-        } else if (is_assignment) {
-            Token var_tok = consume();
-            consume();
-            ExprPtr val = std::make_unique<Expression>(parseExpression(0.0));
-            while (peek().type == TokenType::Newline) consume();
-            return Expression{
-                Operator{"="},
-                std::make_unique<Expression>(Atom{var_tok.lexeme}, nullptr, nullptr),
-                std::move(val)
-        };
         }
+
+        current_token_index = saved_index;
+        Expression left_expr = parseExpression(0.0);
+
+        if (peek().type == TokenType::Newline || peek().type == TokenType::Eof) {
+            while (peek().type == TokenType::Newline) consume();
+            return left_expr;
+        }
+
+        std::string next_lex = peek().lexeme;
+        if (next_lex == "=" || next_lex == "+=" || next_lex == "-=" ||
+            next_lex == "*=" || next_lex == "/=") {
+            std::string assign_op = consume().lexeme;
+
+            ExprPtr right_expr = std::make_unique<Expression>(parseExpression(0.0));
+            while (peek().type == TokenType::Newline) consume();
+
+            if (std::holds_alternative<Atom>(left_expr.value) && assign_op == "=") {
+                std::string var_name = std::get<Atom>(left_expr.value).name;
+                if (!isDeclared(var_name)) {
+                    declareVar(var_name);
+                    return Expression{VarDeclaration{"auto", var_name, std::move(right_expr)}, nullptr, nullptr};
+                }
+            }
+
+            return Expression{
+                Operator{assign_op}, std::make_unique<Expression>(std::move(left_expr)), std::move(right_expr)
+            };
+        }
+
+        throw std::invalid_argument("Unexpected token after expression: " + peek().lexeme);
+    } else {
+        throw std::invalid_argument("Syntax error: Unrecognized statement starting with " + first.lexeme);
     }
-    Expression expr = parseExpression(0.0);
-    if (peek().type == TokenType::Newline)
-        consume();
-    return expr;
 }
 
+bool Lexer::isDeclared(const std::string &varName) {
+    for (auto it = scope_stack.rbegin(); it != scope_stack.rend(); ++it)
+        if (it->find(varName) != it->end())
+            return true;
+    return false;
+}
+
+void Lexer::declareVar(const std::string &varName) {
+    if (!scope_stack.empty())
+        scope_stack.back().insert(varName);
+}
 
 Expression Lexer::parseBlock() {
     std::vector<ExprPtr> statements;
@@ -741,14 +867,13 @@ Expression Lexer::parseBlock() {
 
 Expression Lexer::parseExpression(float minBp) {
     Token token = consume();
-    std::cout << "[PARSEEXPR START] minBp=" << minBp
-            << " token.type=" << (int) token.type
-            << " token.lexeme='" << token.lexeme << "'\n";
     if (token.type == TokenType::Newline || token.type == TokenType::Dedent || token.type == TokenType::Indent)
         return Expression{Atom{""}, nullptr, nullptr};
     Expression lhs;
     if (token.type == TokenType::Atom) {
         lhs = Expression{Atom{token.lexeme}, nullptr, nullptr};
+    } else if (token.type == TokenType::String) {
+        lhs = Expression{StringLiteral{token.lexeme}, nullptr, nullptr};
     } else if (token.type == TokenType::Operator && token.lexeme == "(") {
         lhs = parseExpression(0.0);
         Token next = consume();
@@ -775,26 +900,56 @@ Expression Lexer::parseExpression(float minBp) {
             throw std::invalid_argument("Expected ']' but got " + close_bracket.lexeme);
 
         lhs = Expression{ArrayLiteral{std::move(elements)}, nullptr, nullptr};
-    } else {
+    } else if (token.type == TokenType::Operator && token.lexeme == "{") {
+        std::vector<std::pair<ExprPtr, ExprPtr> > elements;
+        while (peek().type == TokenType::Newline || peek().type == TokenType::Indent) consume();
+        if (peek().lexeme != "}" && peek().type != TokenType::Dedent) {
+            while (true) {
+                if (peek().lexeme == "}" || peek().type == TokenType::Dedent) break;
+
+                ExprPtr key = std::make_unique<Expression>(parseExpression(0.0f));
+
+                while (peek().type == TokenType::Newline) consume();
+                Token colon = consume();
+                if (colon.lexeme != ":") throw std::invalid_argument("Expected ':' in dictionary");
+
+                while (peek().type == TokenType::Newline) consume();
+                ExprPtr val = std::make_unique<Expression>(parseExpression(0.0f));
+
+                elements.push_back({std::move(key), std::move(val)});
+
+                while (peek().type == TokenType::Newline) consume();
+                if (peek().lexeme == ",") {
+                    consume();
+                    while (peek().type == TokenType::Newline || peek().type == TokenType::Indent) consume();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        while (peek().type == TokenType::Newline || peek().type == TokenType::Dedent) consume();
+
+        Token closebrace = consume();
+        if (closebrace.lexeme != "}") throw std::invalid_argument("Expected '}' after dict");
+        lhs = Expression{DictLiteral{std::move(elements)}, nullptr, nullptr};
+    }
+    else {
         throw std::invalid_argument("Unexpected token: " + token.lexeme);
     }
 
     while (true) {
         Token next = peek();
-        std::cout << "[PARSEEXPR LOOP] minBp=" << minBp
-              << " next.type=" << (int)next.type
-              << " next.lexeme='" << next.lexeme << "'\n";
         if (next.type == TokenType::Eof || next.type == TokenType::Newline ||
             next.type == TokenType::Dedent || next.type == TokenType::Indent ||
-            next.lexeme == ")" || next.lexeme == "]" || next.lexeme == "," ||
-            next.lexeme == ":")
+            next.lexeme == ")" || next.lexeme == "]" || next.lexeme == "}" ||
+            next.lexeme == "," || next.lexeme == ":" ||
+            next.lexeme == "=" || next.lexeme == "+=" || next.lexeme == "-=" ||
+            next.lexeme == "*=" || next.lexeme == "/=")
             break;
 
 
         if (next.type != TokenType::Operator) {
-            std::cout << "[PARSEEXPR] minBp=" << minBp
-                    << " next.type=" << (int) next.type
-                    << " next.lexeme='" << next.lexeme << "'\n";
             throw std::invalid_argument("Expected operator but got: " + next.lexeme);
         }
         auto [lbp, rbp] = getBindingPower(next.lexeme);

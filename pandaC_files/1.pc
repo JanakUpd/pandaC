@@ -1,83 +1,82 @@
 using pandaC
 
-# 1. Тестирование объявления функции и рекурсии
-def int64 calculate_factorial(int64 n):
+# 1. Функция с условиями и рекурсией
+def factorial(n):
     if n <= 1:
         return 1
     else:
-        # Проверка вызова функции внутри математического выражения
-        return n * calculate_factorial(n - 1)
+        return n * factorial(n - 1)
 
-# 2. Тестирование сложной математики и передачи аргументов
-def int64 math_magic(int64 a, int64 b):
-    # Приоритет операций: ** имеет наивысший, затем *, затем +
-    int64 result = a + b * 2 ** 3
+# 2. Функция для тестирования строк
+def make_greeting(name, age):
+    prefix = "Hello, "
+    # Конкатенация строк
+    message = prefix + name + "! "
+    return message
+
+# 3. Функция с математическими вычислениями
+def math_test(a, b):
+    result = a ** 2 + b ** 2
+    result /= 2
     return result
 
+# 4. Главная функция
 def main():
-    print("--- PANDAC COMPILER TEST SUITE ---")
+    print("--- STARTING PANDAC TESTS ---")
 
-    # 3. Тест базовых переменных и математики
-    int64 x = 10
-    int64 y = 5
-    int64 z = 2
+    # --- ТЕСТ 1: Переменные и авто-вывод типов ---
+    print("Test 1: Auto Type Inference")
+    user_name = "Janak"
+    user_age = 20
+    # Проверяем перезапись переменных (auto не должно сгенерироваться дважды)
+    user_age += 1
+    msg = make_greeting(user_name, user_age)
+    print(msg)
 
-    # Ожидаем: 10 + (5 * 2) = 20
-    int64 math1 = x + y * z
-    print("Math 1 (Expected 20):")
-    print(math1)
+    # --- ТЕСТ 2: Цикл While и математика ---
+    print("Test 2: While loop and Math")
+    counter = 0
+    total_sum = 0
 
-    # Ожидаем: (10 + 5) * 2 = 30
-    int64 math2 = (x + y) * z
-    print("Math 2 (Expected 30):")
-    print(math2)
+    while counter < 5:
+        total_sum += math_test(counter, 2)
+        counter += 1
 
-    # Унарный минус: -10 * 5 = -50
-    int64 math3 = -x * y
-    print("Math 3 (Expected -50):")
-    print(math3)
+    print("While loop sum:")
+    print(total_sum)
 
-    # 4. Тест вызова пользовательских функций
-    int64 fact_res = calculate_factorial(5)
-    print("Factorial of 5 (Expected 120):")
-    print(fact_res)
+    # --- ТЕСТ 3: Цикл For и Массивы ---
+    print("Test 3: Arrays and For loop")
+    numbers = [10, 20, 30, 40, 50]
+    array_sum = 0
 
-    int64 magic_res = math_magic(x, y)
-    print("Math magic result:")
-    print(magic_res)
-
-    # 5. Тест вложенных условий if-elif-else и логических операторов
-    print("--- Testing conditions ---")
-    if x == 10 and y == 5:
-        print("x is 10 and y is 5")
-
-        # Вложенный if (проверка отступов)
-        if z < 5:
-            print("z is less than 5!")
+    for x in numbers:
+        if x == 30:
+            print("Found 30!")
+        elif x > 30:
+            array_sum += x
         else:
-            print("z is greater than 5!")
+            array_sum -= x
 
-    elif x == 15:
-        print("x is 15")
-    else:
-        print("Something else")
+    print("Array processing result:")
+    print(array_sum)
 
-    # 6. Тест циклов и комбинированной логики
-    print("--- Testing loops ---")
-    int64 loop_sum = 0
-    int64 end_val = 6
+    # --- ТЕСТ 4: Scope (Области видимости) ---
+    print("Test 4: Scopes and Variable Shadowing")
+    shadow_var = "Global"
 
-    for i in range(end_val):
-        # Если число больше 3, вычитаем его, иначе прибавляем
-        if i > 3:
-            loop_sum = loop_sum - i
-        else:
-            loop_sum = loop_sum + i
+    if 1 == 1:
+        # Это новая область видимости (Блок If)
+        # В идеале shadow_var должен перезаписаться (если скоуп работает как в питоне)
+        # Но у нас C++ скоуп, так что он просто найдет переменную выше по дереву!
+        shadow_var = "Modified in If"
 
-        # Проверка двойной вложенности внутри цикла
-        if i == 5:
-            print("Reached the end of loop logic")
+    print(shadow_var)
 
-    print("Final loop sum:")
-    print(loop_sum)
-    print("--- TESTS FINISHED ---")
+    # --- ТЕСТ 5: Рекурсия и производительность ---
+    print("Test 5: Recursion")
+    fact_result = factorial(10)
+    print("Factorial of 10 is:")
+    print(fact_result)
+
+    print("--- ALL TESTS PASSED SUCCESSFULLY ---")

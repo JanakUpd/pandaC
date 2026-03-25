@@ -2,6 +2,7 @@
 #define PANDAC_LEXER_H
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -10,6 +11,7 @@
 enum class TokenType {
     Operator,
     Atom,
+    String,
     Eof,
     Newline,
     Indent,
@@ -89,15 +91,37 @@ struct WhileStatement {
     ExprPtr condition;
     ExprPtr body;
 };
+struct StringLiteral {
+    std::string value;
+};
+struct DictLiteral {
+    std::vector<std::pair<ExprPtr, ExprPtr>> elements;
+};
 
 struct Expression {
-    std::variant<Atom, Operator, FunctionCall, ArrayLiteral, IndexAccess, VarDeclaration, ReturnStatement, IfStatement, Block, UsingStatement, FunctionDeclaration, Program, ForStatement, WhileStatement> value;
+    std::variant<
+        Atom,
+        Operator,
+        FunctionCall,
+        ArrayLiteral,
+        IndexAccess,
+        VarDeclaration,
+        ReturnStatement,
+        IfStatement,
+        Block,
+        UsingStatement,
+        FunctionDeclaration,
+        Program,
+        ForStatement,
+        WhileStatement,
+        StringLiteral,
+        DictLiteral
+    > value;
     ExprPtr lhs = nullptr;
     ExprPtr rhs = nullptr;
 };
 
 class Lexer {
-    std::vector<Token> tokens;
     std::pair<float, float> getBindingPower(const std::string& symbol);
     size_t current_token_index = 0;
     std::vector<int> indent_stack = {0};
@@ -107,7 +131,13 @@ class Lexer {
     Expression parseBlock();
     Expression parseExpression(float minBp);
     void replace(std::string& str, const std::string& from, const std::string& to);
+    std::vector<std::unordered_set<std::string>> scope_stack;
+    void enterScope() { scope_stack.push_back({}); }
+    void exitScope() { if (!scope_stack.empty()) scope_stack.pop_back(); }
+    bool isDeclared(const std::string& varName);
+    void declareVar(const std::string& varName);
 public:
+    std::vector<Token> tokens;
     static std::string astToString(const Expression& expr);
     static std::string toCppString(const Expression& expr, int indentLevel = 0, const std::vector<Compiler::TypeBinder>* typeBinders = nullptr);
     Expression fromString(std::string input);

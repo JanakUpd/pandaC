@@ -61,11 +61,11 @@ int main(int argc, char** argv) {
     if (log)
         Notifier::notifyInfo("Compilation finished successfully in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
 
-    //Building: building the cpp code into executable via gcc
+    //Building: building the cpp code into executable via gcc or alternative
     timer.start();
     std::string exeFile = Compiler::build(cppTranslatedCode, filePath, log);
     duration = timer.getMiliseconds();
-    Notifier::notifyInfo("Program build by gcc in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
+    Notifier::notifyInfo("Program build by backend in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
 
     //Execution: start compiled file
     if (!containsSpecifier(argc, argv, "--no-execution")) {

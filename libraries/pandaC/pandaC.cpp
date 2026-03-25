@@ -193,17 +193,225 @@ std::vector<Var<size_t>> range(long long end) {
     return range(0, end, 1);
 }
 
-void print() {
+inline void pandac_print() {
     std::cout << std::endl;
 }
 
-template<typename T, typename... Args>
-void print(const T& first, const Args&... args) {
-    std::cout << first;
+template <typename T, typename... Args>
+void pandac_print(const T& first, const Args&... args) {
+    std::cout << to_str(first);
     if constexpr (sizeof...(args) > 0) {
         std::cout << " ";
-        print(args...);
     }
-    else
-        std::cout << "\n";
+    pandac_print(args...);
+}
+
+template <typename T>
+std::string pandac_str(const T& val) {
+    return to_str(val);
+}
+
+template <typename T>
+int pandac_int(const T& val) {
+    if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) {
+        return std::stoi(std::string(val));
+    } else {
+        return static_cast<int>(val);
+    }
+}
+
+template <typename T>
+double pandac_float(const T& val) {
+    if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) {
+        return std::stod(std::string(val));
+    } else {
+        return static_cast<double>(val);
+    }
+}
+
+template <typename T>
+auto pandac_len(const T& val) {
+    if constexpr (requires { val.size(); }) {
+        return val.size();
+    } else if constexpr (requires { val.len(); }) {
+        return val.len();
+    } else if constexpr (requires { val.length(); }) {
+        return val.length();
+    } else {
+        return 0;
+    }
+}
+
+template <typename T>
+bool pandac_bool(const T& val) {
+    if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) {
+        return std::string(val).length() > 0;
+    } else {
+        return static_cast<bool>(val);
+    }
+}
+
+struct PandaCDictProxy;
+struct NestedProxy;
+
+inline std::string unquote(std::string s) {
+    if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
+        return s.substr(1, s.size() - 2);
+    }
+    return s;
+}
+
+struct NestedProxy {
+    PandaCDictProxy* parent;
+    std::string childKey;
+    std::string cachedValue;
+
+    NestedProxy(PandaCDictProxy* p, std::string k, std::string v) : parent(p), childKey(k), cachedValue(v) {}
+
+    template<typename T>
+    NestedProxy& operator=(const T& val); // Реализация отложена
+
+    operator std::string() const { return unquote(cachedValue); }
+    operator int() const { try { return std::stoi(unquote(cachedValue)); } catch(...) { return 0; } }
+    operator double() const { try { return std::stod(unquote(cachedValue)); } catch(...) { return 0.0; } }
+
+    bool operator==(const std::string& other) const { return unquote(cachedValue) == other; }
+    bool operator==(const char* other) const { return unquote(cachedValue) == other; }
+    bool operator==(int other) const { return (int)(*this) == other; }
+    bool operator==(bool other) const {
+        std::string v = unquote(cachedValue);
+        bool isTrue = (v == "1" || v == "true" || v == "True");
+        return isTrue == other;
+    }
+};
+
+struct PandaCDictProxy {
+    std::shared_ptr<std::unordered_map<std::string, std::string>> dictRef;
+    std::string key;
+
+    template<typename T>
+    PandaCDictProxy& operator=(const T& val) {
+        (*dictRef)[key] = pandac_str(val);
+        return *this;
+    }
+
+    PandaCDictProxy& operator=(const std::string& val) {
+        (*dictRef)[key] = val;
+        return *this;
+    }
+
+    operator std::string() const { return (*dictRef)[key]; }
+    operator int() const { try { return std::stoi((*dictRef)[key]); } catch(...) { return 0; } }
+    operator double() const { try { return std::stod((*dictRef)[key]); } catch(...) { return 0.0; } }
+
+    bool operator==(const std::string& other) const { return (*dictRef)[key] == other; }
+    bool operator==(const char* other) const { return (*dictRef)[key] == other; }
+    bool operator==(int other) const { return (int)(*this) == other; }
+    bool operator==(bool other) const {
+        std::string v = (*dictRef)[key];
+        bool isTrue = (v == "1" || v == "true" || v == "True");
+        return isTrue == other;
+    }
+
+    NestedProxy operator[](const std::string& childKey) {
+        std::string raw = (*dictRef)[key];
+        std::string keyPattern = "\"" + childKey + "\":";
+        size_t pos = raw.find(keyPattern);
+
+        if (pos == std::string::npos) return NestedProxy(this, childKey, "0");
+
+        size_t valStart = pos + keyPattern.length();
+        while (valStart < raw.length() && std::isspace(raw[valStart])) valStart++;
+
+        size_t valEnd;
+        if (raw[valStart] == '"') {
+            valEnd = valStart + 1;
+            while (valEnd < raw.length() && (raw[valEnd] != '"' || raw[valEnd-1] == '\\')) valEnd++;
+            if (valEnd < raw.length()) valEnd++;
+        } else {
+            valEnd = raw.find_first_of(",}", valStart);
+        }
+        if (valEnd == std::string::npos) valEnd = raw.length();
+
+        std::string val = raw.substr(valStart, valEnd - valStart);
+        return NestedProxy(this, childKey, val);
+    }
+};
+
+template<typename T>
+NestedProxy& NestedProxy::operator=(const T& val) {
+    std::string newVal = pandac_str(val);
+    cachedValue = newVal;
+    std::string raw = parent->operator std::string();
+    std::string keyPattern = "\"" + childKey + "\":";
+    size_t pos = raw.find(keyPattern);
+
+    if (pos != std::string::npos) {
+        size_t valStart = pos + keyPattern.length();
+        while (valStart < raw.length() && std::isspace(raw[valStart])) valStart++;
+
+        size_t valEnd;
+        if (raw[valStart] == '"') {
+            valEnd = valStart + 1;
+            while (valEnd < raw.length() && (raw[valEnd] != '"' || raw[valEnd-1] == '\\')) valEnd++;
+            if (valEnd < raw.length()) valEnd++;
+        } else {
+            valEnd = raw.find_first_of(",}", valStart);
+        }
+        if (valEnd == std::string::npos) valEnd = raw.length();
+
+        std::string updated = raw.substr(0, valStart) + newVal + raw.substr(valEnd);
+        *parent = updated;
+    }
+    return *this;
+}
+
+inline int operator-(const PandaCDictProxy& lhs, const PandaCDictProxy& rhs) { return (int)lhs - (int)rhs; }
+inline int operator+(const PandaCDictProxy& lhs, const PandaCDictProxy& rhs) { return (int)lhs + (int)rhs; }
+inline int operator*(const PandaCDictProxy& lhs, const PandaCDictProxy& rhs) { return (int)lhs * (int)rhs; }
+inline int operator/(const PandaCDictProxy& lhs, const PandaCDictProxy& rhs) { return (int)lhs / (int)rhs; }
+
+inline int operator-(const PandaCDictProxy& lhs, int rhs) { return (int)lhs - rhs; }
+inline int operator-(int lhs, const PandaCDictProxy& rhs) { return lhs - (int)rhs; }
+inline int operator+(const PandaCDictProxy& lhs, int rhs) { return (int)lhs + rhs; }
+inline int operator+(int lhs, const PandaCDictProxy& rhs) { return lhs + (int)rhs; }
+
+inline int operator-(const NestedProxy& lhs, int rhs) { return (int)lhs - rhs; }
+inline int operator-(int lhs, const NestedProxy& rhs) { return lhs - (int)rhs; }
+inline int operator+(const NestedProxy& lhs, int rhs) { return (int)lhs + rhs; }
+inline int operator+(int lhs, const NestedProxy& rhs) { return lhs + (int)rhs; }
+
+inline std::ostream& operator<<(std::ostream& os, const PandaCDictProxy& p) { return os << std::string(p); }
+inline std::ostream& operator<<(std::ostream& os, const NestedProxy& p) { return os << p.cachedValue; }
+inline std::string to_str(const PandaCDictProxy& p) { return std::string(p); }
+inline std::string to_str(const NestedProxy& p) { return unquote(p.cachedValue); }
+
+struct PandaCDict {
+    std::shared_ptr<std::unordered_map<std::string, std::string>> data;
+
+    PandaCDict() : data(std::make_shared<std::unordered_map<std::string, std::string>>()) {}
+
+    PandaCDict(std::initializer_list<std::pair<std::string, std::string>> init)
+        : data(std::make_shared<std::unordered_map<std::string, std::string>>()) {
+        for (const auto& p : init) {
+            (*data)[p.first] = p.second;
+        }
+    }
+
+    template <typename T>
+    PandaCDictProxy operator[](const T& key) {
+        return PandaCDictProxy{data, pandac_str(key)};
+    }
+};
+
+inline std::ostream& operator<<(std::ostream& os, const PandaCDict& d) {
+    os << "{";
+    bool first = true;
+    for (const auto& item : *d.data) {
+        if (!first) os << ", ";
+        first = false;
+        os << "\"" << item.first << "\": " << item.second;
+    }
+    os << "}";
+    return os;
 }

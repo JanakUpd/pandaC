@@ -37,7 +37,7 @@ std::stringstream Preprocessor::run(const std::string &filePath, const bool &log
         std::string processedLine = line.find('#') == std::string::npos ? line : line.substr(0, line.find('#'));
         bool isEmpty = true;
         for (char c : processedLine) {
-            if (!std::isspace(c)) {
+            if (!std::isspace(static_cast<unsigned char>(c))) {
                 isEmpty = false;
                 break;
             }

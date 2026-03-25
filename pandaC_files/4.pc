@@ -1,16 +1,81 @@
 using pandaC
+# Функция для вывода статуса сервера
+def print_server_status(config):
+    if config["settings"]["debug"] == true:
+        print("WARNING: Server is running in DEBUG mode!")
 
-def int add(int a, int b):
-    return a + b
+    print("Server starting at", config["host"])
+    print("Listening on port", config["port"])
+    return true
 
-def fl2 divide(fl2 a, fl2 b):
-    return a / b
+# Функция для вычисления урона
+def calculate_hit(attacker_stats, defender_stats):
+    actual_damage = attacker_stats["damage"] - defender_stats["armor"]
+    defender_stats["health"] = defender_stats["health"] - actual_damage
+    return defender_stats["health"]
 
-def int main():
-    int x = 100
-    int y = 50
-    int sum = add(x, y)
-    print("Sum result: " + sum)
-    print("Division result: " + divide(10.0, 2.0))
-    str greeting = "Hello"
-    print(greeting + " World " + 123)
+def main():
+    print("=== PANDAC DICTIONARY TESTS ===")
+
+    # Тест 1: Базовое создание и чтение
+    user = {
+        "name": "Janak",
+        "role": "Developer",
+        "level": 99
+    }
+
+    print("\n--- User Profile ---")
+    print("Name:", user["name"])
+    print("Role:", user["role"])
+    print("Level:", user["level"])
+
+    # Тест 2: Добавление новых ключей и изменение существующих
+    user["language"] = "pandaC"
+    user["level"] = 100
+
+    print("New Language:", user["language"])
+    print("Updated Level:", user["level"])
+
+    # Тест 3: Словари с вложенными структурами
+    server_config = {
+        "host": "127.0.0.1",
+        "port": 8080,
+        "settings": {
+            "debug": true,
+            "max_connections": 500
+        }
+    }
+
+    print("\n--- Server Config ---")
+    print("Host:", server_config["host"])
+    print("Port:", server_config["port"])
+    print("Debug Mode:", server_config["settings"]["debug"])
+
+    # Изменяем вложенное значение
+    server_config["settings"]["max_connections"] = 1000
+    print("Max Connections:", server_config["settings"]["max_connections"])
+
+    # Тест 4: Передача словаря в функцию
+    print("\n--- Function Test ---")
+    status = print_server_status(server_config)
+
+    # Тест 5: Математика со значениями из словаря
+    stats = {
+        "health": 100,
+        "damage": 15,
+        "armor": 5
+    }
+
+    enemy = {
+        "health": 50,
+        "damage": 10,
+        "armor": 2
+    }
+
+    print("\n--- Battle Test ---")
+    print("Enemy health before:", enemy["health"])
+    calculate_hit(stats, enemy)
+    print("Enemy health after:", enemy["health"])
+
+    print("\nAll tests passed successfully!")
+    return 0

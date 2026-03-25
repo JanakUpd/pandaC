@@ -3,6 +3,9 @@ using pandaC
 def main():
     int64 i = 0
     int64 end = 1000000000
-    for i in range(end):
+    while i < end:
         i += 1
-    print("Loop finished")
+    print("While on 1000000000 finished")
+    for j in range(1000000000):
+        j += 1
+    print("For on 1000000000 finished")

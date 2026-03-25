@@ -1,17 +1,127 @@
 using pandaC
 
+# ==========================================
+# ЧАСТЬ 1: УЖЕ РЕАЛИЗОВАНО (База и алгоритмы)
+# ==========================================
+def calculate_stats(numbers):
+    total = 0
+    for n in numbers:
+        total += n
+    return total / len(numbers)
+
+def math_and_types():
+    string_val = "42"
+    number = int(string_val)
+    number += 8
+
+    if float(number) >= 50.0:
+        print("Success: number is", number)
+    else:
+        print("Failed")
+
+# ==========================================
+# ЧАСТЬ 2: ТЕОРЕТИЧЕСКАЯ (Импорты и Модули)
+# ==========================================
+#import math
+#import os
+#from time import sleep
+
+# ==========================================
+# ЧАСТЬ 3: ТЕОРЕТИЧЕСКАЯ (Словари / Hash Maps)
+# ==========================================
+# Под капотом это будет std::unordered_map<std::string, auto>
+def dictionary_test():
+    config = {
+        "host": "127.0.0.1",
+        "port": 8080,
+        "debug": True
+    }
+    config["port"] = 8081
+    print("Connecting to", config["host"], "on port", config["port"])
+
+# ==========================================
+# ЧАСТЬ 4: ТЕОРЕТИЧЕСКАЯ (ООП и Классы)
+# ==========================================
+# Под капотом: struct/class в C++ с конструктором и методами
+class Entity:
+    # Конструктор
+    def __init__(self, name, x, y):
+        self.name = name
+        self.x = x
+        self.y = y
+        self.is_active = True
+
+    def move(self, dx, dy):
+        self.x += dx
+        self.y += dy
+
+    def __str__(self):
+        return "Entity " + self.name + " at " + str(self.x) + ":" + str(self.y)
+
+# Наследование
+class Player(Entity):
+    def __init__(self, name, x, y, health):
+        super().__init__(name, x, y)
+        self.health = health
+
+    def take_damage(self, amount):
+        self.health -= amount
+        if self.health <= 0:
+            self.is_active = False
+            print("Player", self.name, "died!")
+
+# ==========================================
+# ЧАСТЬ 5: ТЕОРЕТИЧЕСКАЯ (Ошибки и Исключения)
+# ==========================================
+# Под капотом: C++ try { ... } catch(const std::exception& e) { ... }
+def divide_safe(a, b):
+    try:
+        return a / b
+    except Exception as e:
+        print("Error during division:", str(e))
+        return 0
+    finally:
+        print("Division attempted")
+
+# ==========================================
+# ЧАСТЬ 6: ТЕОРЕТИЧЕСКАЯ (Работа с файлами и контекст)
+# ==========================================
+def save_data(player, filename):
+    # Менеджер контекста (автоматически закроет файл - std::ofstream)
+    with open(filename, "w") as f:
+        f.write(player.name + "," + str(player.health))
+    print("Saved to", filename)
+
+# ==========================================
+# ЧАСТЬ 7: ТЕОРЕТИЧЕСКАЯ (Функциональное программирование)
+# ==========================================
+def functional_test():
+    arr = [1, 2, 3, 4, 5, 6]
+
+    # List comprehension (Генераторы списков)
+    evens = [x for x in arr if x % 2 == 0]
+
+    # Lambda-функции
+    doubled = map(lambda x: x * 2, evens)
+    print("Doubled evens:", doubled)
+
+# ==========================================
+# ТОЧКА ВХОДА
+# ==========================================
 def main():
-    print("--- AST Test ---")
+    print("=== PANDAC ULTIMATE LANGUAGE TEST ===")
 
-    # 1. Объявление переменных и сложные типы
-    list<int64> arr = [10, 20, 30]
-    int64 index = 1
+    # Проверка базы
+    math_and_types()
 
-    # 2. Доступ по индексу и математика
-    int64 val = arr[index - 1] + arr[index + 1]
-    print(val) # Должно вывести 40 (10 + 30)
+    # Работа с массивами
+    nums = [10, 20, 30, 40]
+    print("Average is:", calculate_stats(nums))
 
-    # 3. Точечная нотация
-    int64 arr_len = arr.len()
-    print("Array length is:")
-    print(arr_len)
+    # Классы и объекты
+    hero = Player("Janak", 0, 0, 100)
+    hero.move(10, 5)
+    hero.take_damage(120)
+    print(str(hero))
+
+    print("=== END OF TESTS ===")
