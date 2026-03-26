@@ -60,7 +60,7 @@ void Lexer::replace(std::string &str, const std::string &from, const std::string
     }
 }
 
-Expression Lexer::fromString(std::string input) {
+void Lexer::tokenize(const std::string& input) {
     tokens.clear();
     current_token_index = 0;
     scope_stack.clear();
@@ -227,6 +227,10 @@ Expression Lexer::fromString(std::string input) {
         indent_stack.pop_back();
         tokens.push_back(Token{TokenType::Dedent, "DEDENT"});
     }
+}
+
+Expression Lexer::fromString(std::string input) {
+    tokenize(input);
 
     std::vector<ExprPtr> program_statements;
     while (peek().type != TokenType::Eof) {
@@ -634,6 +638,196 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                       }, expr.value);
 }
 
+Expression Lexer::parseUsingStatement() {
+    consume();
+    Token lib = consume();
+    return Expression{UsingStatement{lib.lexeme}, nullptr, nullptr};
+}
+
+Expression Lexer::parseWhileStatement() {
+    consume();
+    ExprPtr condition = std::make_unique<Expression>(parseExpression(0.0));
+
+    if (peek().lexeme == ":") consume();
+    while (peek().type == TokenType::Newline) consume();
+
+    if (peek().type != TokenType::Indent)
+        throw std::invalid_argument("Expected an indented block after 'while'");
+
+    consume();
+    ExprPtr body = std::make_unique<Expression>(parseBlock());
+
+    if (peek().type == TokenType::Dedent) consume();
+    while (peek().type == TokenType::Newline) consume();
+
+    return Expression{WhileStatement{std::move(condition), std::move(body)}, nullptr, nullptr};
+}
+
+Expression Lexer::parseForStatement() {
+    consume();
+
+    Token iter_tok = consume();
+    std::string iterator_name = iter_tok.lexeme;
+
+    Token in_tok = consume();
+    if (in_tok.lexeme != "in") {
+        throw std::invalid_argument("Expected 'in' after for iterator");
+    }
+
+    ExprPtr collection = std::make_unique<Expression>(parseExpression(0.0));
+
+    if (peek().lexeme == ":") consume();
+    while (peek().type == TokenType::Newline) consume();
+
+    if (peek().type != TokenType::Indent)
+        throw std::invalid_argument("Expected an indented block after 'for'");
+
+    consume();
+    ExprPtr body = std::make_unique<Expression>(parseBlock());
+    if (peek().type == TokenType::Dedent) consume();
+    while (peek().type == TokenType::Newline) consume();
+    return Expression{ForStatement{iterator_name, std::move(collection), std::move(body)}, nullptr, nullptr};
+}
+
+Expression Lexer::parseFunctionDeclaration() {
+    consume();
+
+    Token first_token = consume();
+    std::string return_type = "PandaVar";
+    std::string func_name = first_token.lexeme;
+
+    if (peek().lexeme != "(") {
+        return_type = first_token.lexeme;
+        Token name_token = consume();
+        func_name = name_token.lexeme;
+    }
+
+    if (peek().lexeme != "(")
+        throw std::invalid_argument("Expected '(' after function name");
+    consume();
+
+    std::vector<FunctionArg> args;
+    if (peek().lexeme != ")") {
+        while (true) {
+            Token arg_first = consume();
+            std::string arg_type = "PandaVar";
+            std::string arg_name = arg_first.lexeme;
+
+            if (peek().type == TokenType::Atom) {
+                arg_type = arg_first.lexeme;
+                arg_name = consume().lexeme;
+            }
+
+            args.push_back({arg_type, arg_name});
+
+            if (peek().lexeme == ",") {
+                consume();
+            } else {
+                break;
+            }
+        }
+    }
+
+    if (peek().lexeme != ")")
+        throw std::invalid_argument("Expected ')' after function arguments");
+
+    consume();
+    if (peek().lexeme == ":") consume();
+
+    while (peek().type == TokenType::Newline) consume();
+
+    if (peek().type != TokenType::Indent)
+        throw std::invalid_argument("Expected an indented block after 'def'");
+    enterScope();
+    for (const auto &arg: args) {
+        declareVar(arg.name);
+    }
+    consume();
+    ExprPtr body = std::make_unique<Expression>(parseBlock());
+    exitScope();
+    if (peek().type == TokenType::Dedent)
+        consume();
+    while (peek().type == TokenType::Newline) consume();
+    return Expression{FunctionDeclaration{return_type, func_name, args, std::move(body)}, nullptr, nullptr};
+}
+
+Expression Lexer::parseIfStatement() {
+    consume();
+    ExprPtr condition = std::make_unique<Expression>(parseExpression(0.0));
+
+    if (peek().lexeme == ":") consume();
+    while (peek().type == TokenType::Newline) consume();
+
+    if (peek().type != TokenType::Indent)
+        throw std::invalid_argument("Expected an indented block after 'if'");
+
+    consume();
+    ExprPtr body = std::make_unique<Expression>(parseBlock());
+
+    if (peek().type == TokenType::Dedent) consume();
+    ExprPtr else_body = nullptr;
+    ExprPtr *current_else_tail = &else_body;
+
+    while (true) {
+        while (peek().type == TokenType::Newline) consume();
+
+        if (peek().type == TokenType::Atom && (peek().lexeme == "else" || peek().lexeme == "elif")) {
+            Token else_tok = consume();
+
+            if (else_tok.lexeme == "elif") {
+                ExprPtr elif_cond = std::make_unique<Expression>(parseExpression(0.0));
+
+                if (peek().lexeme == ":") consume();
+                while (peek().type == TokenType::Newline) consume();
+
+                if (peek().type != TokenType::Indent)
+                    throw std::invalid_argument("Expected an indented block after 'elif'");
+
+                consume();
+                ExprPtr elif_body = std::make_unique<Expression>(parseBlock());
+
+                if (peek().type == TokenType::Dedent) consume();
+
+                ExprPtr new_elif = std::make_unique<Expression>(Expression{
+                    IfStatement{std::move(elif_cond), std::move(elif_body), nullptr},
+                    nullptr, nullptr
+                });
+
+                *current_else_tail = std::move(new_elif);
+                current_else_tail = &std::get<IfStatement>((*current_else_tail)->value).else_body;
+            } else {
+                if (peek().lexeme == ":") consume();
+                while (peek().type == TokenType::Newline) consume();
+
+                if (peek().type != TokenType::Indent)
+                    throw std::invalid_argument("Expected an indented block after 'else'");
+
+                consume();
+                *current_else_tail = std::make_unique<Expression>(parseBlock());
+
+                if (peek().type == TokenType::Dedent) consume();
+                while (peek().type == TokenType::Newline) consume();
+
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    return Expression{IfStatement{std::move(condition), std::move(body), std::move(else_body)}, nullptr, nullptr};
+}
+
+Expression Lexer::parseReturnStatement() {
+    consume();
+    ExprPtr ret_val = nullptr;
+    if (peek().type != TokenType::Eof && peek().type != TokenType::Newline)
+        ret_val = std::make_unique<Expression>(parseExpression(0.0));
+    if (peek().type == TokenType::Newline)
+        consume();
+
+    return Expression{ReturnStatement{std::move(ret_val)}, nullptr, nullptr};
+}
+
 Expression Lexer::parseStatement() {
     while (peek().type == TokenType::Newline)
         consume();
@@ -644,183 +838,17 @@ Expression Lexer::parseStatement() {
     if (first.type == TokenType::Eof)
         throw std::invalid_argument("Unexpected EOF in parseStatement");
     if (first.type == TokenType::Atom && first.lexeme == "using") {
-        consume();
-        Token lib = consume();
-        return Expression{UsingStatement{lib.lexeme}, nullptr, nullptr};
+        return parseUsingStatement();
     } else if (first.type == TokenType::Atom && first.lexeme == "while") {
-        consume();
-        ExprPtr condition = std::make_unique<Expression>(parseExpression(0.0));
-
-        if (peek().lexeme == ":") consume();
-        while (peek().type == TokenType::Newline) consume();
-
-        if (peek().type != TokenType::Indent)
-            throw std::invalid_argument("Expected an indented block after 'while'");
-
-        consume();
-        ExprPtr body = std::make_unique<Expression>(parseBlock());
-
-        if (peek().type == TokenType::Dedent) consume();
-        while (peek().type == TokenType::Newline) consume();
-
-        return Expression{WhileStatement{std::move(condition), std::move(body)}, nullptr, nullptr};
+        return parseWhileStatement();
     } else if (first.type == TokenType::Atom && first.lexeme == "for") {
-        consume();
-
-        Token iter_tok = consume();
-        std::string iterator_name = iter_tok.lexeme;
-
-        Token in_tok = consume();
-        if (in_tok.lexeme != "in") {
-            throw std::invalid_argument("Expected 'in' after for iterator");
-        }
-
-        ExprPtr collection = std::make_unique<Expression>(parseExpression(0.0));
-
-        if (peek().lexeme == ":") consume();
-        while (peek().type == TokenType::Newline) consume();
-
-        if (peek().type != TokenType::Indent)
-            throw std::invalid_argument("Expected an indented block after 'for'");
-
-        consume();
-        ExprPtr body = std::make_unique<Expression>(parseBlock());
-        if (peek().type == TokenType::Dedent) consume();
-        while (peek().type == TokenType::Newline) consume();
-        return Expression{ForStatement{iterator_name, std::move(collection), std::move(body)}, nullptr, nullptr};
+        return parseForStatement();
     } else if (first.type == TokenType::Atom && first.lexeme == "def") {
-        consume();
-
-        Token first_token = consume();
-        std::string return_type = "PandaVar";
-        std::string func_name = first_token.lexeme;
-
-        if (peek().lexeme != "(") {
-            return_type = first_token.lexeme;
-            Token name_token = consume();
-            func_name = name_token.lexeme;
-        }
-
-        if (peek().lexeme != "(")
-            throw std::invalid_argument("Expected '(' after function name");
-        consume();
-
-        std::vector<FunctionArg> args;
-        if (peek().lexeme != ")") {
-            while (true) {
-                Token arg_first = consume();
-                std::string arg_type = "PandaVar";
-                std::string arg_name = arg_first.lexeme;
-
-                if (peek().type == TokenType::Atom) {
-                    arg_type = arg_first.lexeme;
-                    arg_name = consume().lexeme;
-                }
-
-                args.push_back({arg_type, arg_name});
-
-                if (peek().lexeme == ",") {
-                    consume();
-                } else {
-                    break;
-                }
-            }
-        }
-
-        if (peek().lexeme != ")")
-            throw std::invalid_argument("Expected ')' after function arguments");
-
-        consume();
-        if (peek().lexeme == ":") consume();
-
-        while (peek().type == TokenType::Newline) consume();
-
-        if (peek().type != TokenType::Indent)
-            throw std::invalid_argument("Expected an indented block after 'def'");
-        enterScope();
-        for (const auto &arg: args) {
-            declareVar(arg.name);
-        }
-        consume();
-        ExprPtr body = std::make_unique<Expression>(parseBlock());
-        exitScope();
-        if (peek().type == TokenType::Dedent)
-            consume();
-        while (peek().type == TokenType::Newline) consume();
-        return Expression{FunctionDeclaration{return_type, func_name, args, std::move(body)}, nullptr, nullptr};
+        return parseFunctionDeclaration();
     } else if (first.type == TokenType::Atom && first.lexeme == "if") {
-        consume();
-        ExprPtr condition = std::make_unique<Expression>(parseExpression(0.0));
-
-        if (peek().lexeme == ":") consume();
-        while (peek().type == TokenType::Newline) consume();
-
-        if (peek().type != TokenType::Indent)
-            throw std::invalid_argument("Expected an indented block after 'if'");
-
-        consume();
-        ExprPtr body = std::make_unique<Expression>(parseBlock());
-
-        if (peek().type == TokenType::Dedent) consume();
-        ExprPtr else_body = nullptr;
-        ExprPtr *current_else_tail = &else_body;
-
-        while (true) {
-            while (peek().type == TokenType::Newline) consume();
-
-            if (peek().type == TokenType::Atom && (peek().lexeme == "else" || peek().lexeme == "elif")) {
-                Token else_tok = consume();
-
-                if (else_tok.lexeme == "elif") {
-                    ExprPtr elif_cond = std::make_unique<Expression>(parseExpression(0.0));
-
-                    if (peek().lexeme == ":") consume();
-                    while (peek().type == TokenType::Newline) consume();
-
-                    if (peek().type != TokenType::Indent)
-                        throw std::invalid_argument("Expected an indented block after 'elif'");
-
-                    consume();
-                    ExprPtr elif_body = std::make_unique<Expression>(parseBlock());
-
-                    if (peek().type == TokenType::Dedent) consume();
-
-                    ExprPtr new_elif = std::make_unique<Expression>(Expression{
-                        IfStatement{std::move(elif_cond), std::move(elif_body), nullptr},
-                        nullptr, nullptr
-                    });
-
-                    *current_else_tail = std::move(new_elif);
-                    current_else_tail = &std::get<IfStatement>((*current_else_tail)->value).else_body;
-                } else {
-                    if (peek().lexeme == ":") consume();
-                    while (peek().type == TokenType::Newline) consume();
-
-                    if (peek().type != TokenType::Indent)
-                        throw std::invalid_argument("Expected an indented block after 'else'");
-
-                    consume();
-                    *current_else_tail = std::make_unique<Expression>(parseBlock());
-
-                    if (peek().type == TokenType::Dedent) consume();
-                    while (peek().type == TokenType::Newline) consume();
-
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-        return Expression{IfStatement{std::move(condition), std::move(body), std::move(else_body)}, nullptr, nullptr};
+        return parseIfStatement();
     } else if (first.type == TokenType::Atom && first.lexeme == "return") {
-        consume();
-        ExprPtr ret_val = nullptr;
-        if (peek().type != TokenType::Eof && peek().type != TokenType::Newline)
-            ret_val = std::make_unique<Expression>(parseExpression(0.0));
-        if (peek().type == TokenType::Newline)
-            consume();
-
-        return Expression{ReturnStatement{std::move(ret_val)}, nullptr, nullptr};
+        return parseReturnStatement();
     } else if (first.type == TokenType::Atom || first.type == TokenType::Operator) {
         if (first.type == TokenType::Operator) {
             bool isValidStart = (first.lexeme == "(" || first.lexeme == "{" ||

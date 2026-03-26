@@ -65,13 +65,15 @@ int main(int argc, char** argv) {
     timer.start();
     std::string exeFile = Compiler::build(cppTranslatedCode, filePath, log);
     duration = timer.getMiliseconds();
-    Notifier::notifyInfo("Program build by backend in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
+    if (log)
+        Notifier::notifyInfo("Program build by backend in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
 
     //Execution: start compiled file
     if (!containsSpecifier(argc, argv, "--no-execution")) {
         timer.start();
         Compiler::execute(exeFile, log);
         duration = timer.getMiliseconds();
-        Notifier::notifyInfo("Program executed in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
+        if (log)
+            Notifier::notifyInfo("Program executed in " + (duration == 0 ? "<1" : std::to_string(duration)) + " miliseconds.");
     }
 }

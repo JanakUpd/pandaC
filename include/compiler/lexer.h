@@ -141,6 +141,14 @@ public:
     static std::string astToString(const Expression& expr);
     static std::string toCppString(const Expression& expr, int indentLevel = 0, const std::vector<Compiler::TypeBinder>* typeBinders = nullptr);
     Expression fromString(std::string input);
+private:
+    void tokenize(const std::string& input);
+    Expression parseUsingStatement();
+    Expression parseWhileStatement();
+    Expression parseForStatement();
+    Expression parseIfStatement();
+    Expression parseFunctionDeclaration();
+    Expression parseReturnStatement();
 };
 
 
