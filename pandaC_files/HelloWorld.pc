@@ -1,8 +1,8 @@
 using pandaC
 
 def main():
-    str name = "Janak"
-    str greeting = "Hello, " + name + "! Welcome to pandaC."
+    name = "Janak"
+    greeting = "Hello, " + name + "! Welcome to pandaC."
     print(greeting)
 
     # Проверка спецсимволов внутри строки

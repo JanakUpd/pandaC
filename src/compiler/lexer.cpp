@@ -393,13 +393,13 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               return result;
                           },
                           [&](const DictLiteral &dict) -> std::string {
-                              std::string result = "PandaCDict{";
+                              std::string result = "make_pandac_dict({";
                               for (size_t i = 0; i < dict.elements.size(); ++i) {
                                   result += "{" + toCppString(*dict.elements[i].first, indentLevel, typeBinders) +
                                           ", " + toCppString(*dict.elements[i].second, indentLevel, typeBinders) + "}";
                                   if (i < dict.elements.size() - 1) result += ", ";
                               }
-                              result += "}";
+                              result += "})";
                               return result;
                           },
 
@@ -550,7 +550,7 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                                   if (op == "-") return "pandac_sub(" + lhs_str + ", " + rhs_str + ")";
                                   if (op == "*") return "pandac_mul(" + lhs_str + ", " + rhs_str + ")";
                                   if (op == "/") return "pandac_div(" + lhs_str + ", " + rhs_str + ")";
-                                  if (op == "//") return "pandac_int_div(" + lhs_str + ", " + rhs_str + ")";
+                                  if (op == "//") return "pandac_int64_div(" + lhs_str + ", " + rhs_str + ")";
                                   if (op == "%") return "pandac_mod(" + lhs_str + ", " + rhs_str + ")";
                                   if (op == "==") return "pandac_eq(" + lhs_str + ", " + rhs_str + ")";
                                   if (op == "!=") return "pandac_neq(" + lhs_str + ", " + rhs_str + ")";
@@ -589,12 +589,12 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               return "return;\n";
                           },
                           [&](const ArrayLiteral &arr) -> std::string {
-                              std::string result = "PandaCList{";
+                              std::string result = "make_pandac_list({";
                               for (size_t i = 0; i < arr.elements.size(); ++i) {
                                   result += toCppString(*arr.elements[i], indentLevel, typeBinders);
                                   if (i < arr.elements.size() - 1) result += ", ";
                               }
-                              result += "}";
+                              result += "})";
                               return result;
                           },
                           [&](const VarDeclaration &decl) -> std::string {
