@@ -2,7 +2,6 @@ struct PandaVar;
 struct PandaCList;
 struct PandaCDict;
 
-
 template<typename T>
 std::string to_str(const T &val) {
     if constexpr (std::is_convertible_v<T, std::string>) {
@@ -21,10 +20,10 @@ std::string pandac_str(const T& val) {
 }
 
 template <typename T>
-int pandac_int(const T& val) {
-    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar>) return static_cast<int>(val);
-    else if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) return std::stoi(std::string(val));
-    else return static_cast<int>(val);
+int64_t pandac_int64(const T& val) {
+    if constexpr (std::is_same_v<std::decay_t<T>, PandaVar>) return static_cast<int64_t>(val);
+    else if constexpr (std::is_constructible_v<std::string, T> && !std::is_arithmetic_v<T>) return std::stoll(std::string(val));
+    else return static_cast<int64_t>(val);
 }
 
 template <typename T>
@@ -57,9 +56,6 @@ inline std::string unquote(std::string s) {
     return s;
 }
 
-// ==========================================
-// PANDAVAR CLASSES (Core Types)
-// ==========================================
 
 class PandaVar {
 public:
@@ -68,7 +64,15 @@ public:
     PandaVar() = default;
 
     template<typename T>
-    PandaVar(const T& val) : data(val) {}
+    PandaVar(const T& val) {
+        if constexpr (std::is_integral_v<T> && !std::is_same_v<std::decay_t<T>, bool>) {
+            data = static_cast<int64_t>(val);
+        } else if constexpr (std::is_floating_point_v<T>) {
+            data = static_cast<double>(val);
+        } else {
+            data = val;
+        }
+    }
 
     template<typename T>
     PandaVar& operator=(const T& val) {
@@ -84,7 +88,7 @@ public:
         return pandac_getitem(key);
     }
 
-    int length() const;
+    int64_t length() const;
 
     std::vector<PandaVar>::iterator begin();
     std::vector<PandaVar>::iterator end();
@@ -96,40 +100,40 @@ public:
             return PandaVar(static_cast<std::string>(a) + static_cast<std::string>(b));
         if (a.data.type() == typeid(double) || b.data.type() == typeid(double))
             return PandaVar(static_cast<double>(a) + static_cast<double>(b));
-        return PandaVar(static_cast<int>(a) + static_cast<int>(b));
+        return PandaVar(static_cast<int64_t>(a) + static_cast<int64_t>(b));
     }
 
     friend PandaVar operator-(const PandaVar& a, const PandaVar& b) {
         if (a.data.type() == typeid(double) || b.data.type() == typeid(double)) return PandaVar(static_cast<double>(a) - static_cast<double>(b));
-        return PandaVar(static_cast<int>(a) - static_cast<int>(b));
+        return PandaVar(static_cast<int64_t>(a) - static_cast<int64_t>(b));
     }
 
     friend PandaVar operator*(const PandaVar& a, const PandaVar& b) {
         if (a.data.type() == typeid(double) || b.data.type() == typeid(double)) return PandaVar(static_cast<double>(a) * static_cast<double>(b));
-        return PandaVar(static_cast<int>(a) * static_cast<int>(b));
+        return PandaVar(static_cast<int64_t>(a) * static_cast<int64_t>(b));
     }
 
     friend PandaVar operator/(const PandaVar& a, const PandaVar& b) {
         return PandaVar(static_cast<double>(a) / static_cast<double>(b));
     }
 
-    explicit operator int() const {
-        if (data.type() == typeid(int)) return std::any_cast<int>(data);
-        if (data.type() == typeid(double)) return static_cast<int>(std::any_cast<double>(data));
-        if (data.type() == typeid(std::string)) { try { return std::stoi(std::any_cast<std::string>(data)); } catch(...) { return 0; } }
+    explicit operator int64_t() const {
+        if (data.type() == typeid(int64_t)) return std::any_cast<int64_t>(data);
+        if (data.type() == typeid(double)) return static_cast<int64_t>(std::any_cast<double>(data));
+        if (data.type() == typeid(std::string)) { try { return std::stoll(std::any_cast<std::string>(data)); } catch(...) { return 0; } }
         return 0;
     }
 
     explicit operator double() const {
         if (data.type() == typeid(double)) return std::any_cast<double>(data);
-        if (data.type() == typeid(int)) return static_cast<double>(std::any_cast<int>(data));
+        if (data.type() == typeid(int64_t)) return static_cast<double>(std::any_cast<int64_t>(data));
         if (data.type() == typeid(std::string)) { try { return std::stod(std::any_cast<std::string>(data)); } catch(...) { return 0.0; } }
         return 0.0;
     }
 
     explicit operator bool() const {
         if (data.type() == typeid(bool)) return std::any_cast<bool>(data);
-        if (data.type() == typeid(int)) return std::any_cast<int>(data) != 0;
+        if (data.type() == typeid(int64_t)) return std::any_cast<int64_t>(data) != 0;
         if (data.type() == typeid(std::string)) return std::any_cast<std::string>(data).length() > 0;
         return false;
     }
@@ -163,18 +167,14 @@ struct PandaCList {
     PandaCList(std::initializer_list<PandaVar> init)
         : data(std::make_shared<std::vector<PandaVar>>(init.begin(), init.end())) {}
 
-    PandaVar& pandac_getitem(int index) {
+    PandaVar& pandac_getitem(int64_t index) {
         return (*data)[index];
     }
 
-    int length() const {
+    int64_t length() const {
         return data->size();
     }
 };
-
-// ==========================================
-// PANDAVAR METHOD IMPLEMENTATIONS
-// ==========================================
 
 template<typename K>
 inline PandaVar& PandaVar::pandac_getitem(const K& key) {
@@ -182,12 +182,12 @@ inline PandaVar& PandaVar::pandac_getitem(const K& key) {
         return std::any_cast<PandaCDict>(&data)->pandac_getitem(pandac_str(key));
     }
     if (data.type() == typeid(PandaCList)) {
-        return std::any_cast<PandaCList>(&data)->pandac_getitem(pandac_int(key));
+        return std::any_cast<PandaCList>(&data)->pandac_getitem(pandac_int64(key));
     }
     throw std::runtime_error("type does not support [index]");
 }
 
-inline int PandaVar::length() const {
+inline int64_t PandaVar::length() const {
     if (data.type() == typeid(PandaCList)) return std::any_cast<PandaCList>(&data)->length();
     if (data.type() == typeid(std::string)) return std::any_cast<std::string>(&data)->length();
     if (data.type() == typeid(PandaCDict)) return std::any_cast<PandaCDict>(&data)->data->size();
@@ -237,7 +237,7 @@ inline std::ostream& operator<<(std::ostream& os, const PandaCList& l) {
 
 inline std::ostream& operator<<(std::ostream& os, const PandaVar& var) {
     if (var.data.type() == typeid(PandaCList)) return os << std::any_cast<PandaCList>(var.data);
-    if (var.data.type() == typeid(int)) return os << std::any_cast<int>(var.data);
+    if (var.data.type() == typeid(int64_t)) return os << std::any_cast<int64_t>(var.data);
     if (var.data.type() == typeid(double)) return os << std::any_cast<double>(var.data);
     if (var.data.type() == typeid(std::string)) return os << std::any_cast<std::string>(var.data);
     if (var.data.type() == typeid(PandaCDict)) return os << std::any_cast<PandaCDict>(var.data);
@@ -247,7 +247,7 @@ inline std::ostream& operator<<(std::ostream& os, const PandaVar& var) {
 
 inline PandaVar::operator std::string() const {
     if (data.type() == typeid(std::string)) return std::any_cast<std::string>(data);
-    if (data.type() == typeid(int)) return std::to_string(std::any_cast<int>(data));
+    if (data.type() == typeid(int64_t)) return std::to_string(std::any_cast<int64_t>(data));
     if (data.type() == typeid(double)) return std::to_string(std::any_cast<double>(data));
     if (data.type() == typeid(PandaCDict)) {
         std::stringstream ss;
@@ -287,7 +287,7 @@ inline std::vector<PandaVar> range(long long start, long long end, long long ste
     std::vector<PandaVar> result;
     result.reserve((end - start) / step);
     for (long long i = start; i < end; i += step){
-        result.push_back(PandaVar(static_cast<int>(i)));
+        result.push_back(PandaVar(static_cast<int64_t>(i)));
     }
     return result;
 }
@@ -330,11 +330,11 @@ auto pandac_mul(const T& a, const U& b) {
         return a * b;
     } else if constexpr (std::is_constructible_v<std::string, decltype(a)> && std::is_convertible_v<decltype(b), size_t>) {
         std::string res = "";
-        for (size_t i = 0; i < pandac_int(b); ++i) res += pandac_str(a);
+        for (size_t i = 0; i < pandac_int64(b); ++i) res += pandac_str(a);
         return res;
     } else if constexpr (std::is_convertible_v<decltype(a), size_t> && std::is_constructible_v<std::string, decltype(b)>) {
         std::string res = "";
-        for (size_t i = 0; i < pandac_int(a); ++i) res += pandac_str(b);
+        for (size_t i = 0; i < pandac_int64(a); ++i) res += pandac_str(b);
         return res;
     } else {
         return a * b;
@@ -347,13 +347,13 @@ auto pandac_div(const T& a, const U& b) {
 }
 
 template<typename T, typename U>
-auto pandac_int_div(const T& a, const U& b) {
-    return pandac_int(a) / pandac_int(b);
+auto pandac_int64_div(const T& a, const U& b) {
+    return pandac_int64(a) / pandac_int64(b);
 }
 
 template<typename T, typename U>
 auto pandac_mod(const T& a, const U& b) {
-    return pandac_int(a) % pandac_int(b);
+    return pandac_int64(a) % pandac_int64(b);
 }
 
 template<typename T, typename U>
@@ -388,7 +388,7 @@ template<typename T, typename U>
 auto pandac_assign_div(T&& lhs, const U& rhs) { return lhs = pandac_div(lhs, rhs); }
 
 template<typename T, typename U>
-auto pandac_assign_int_div(T&& lhs, const U& rhs) { return lhs = pandac_int_div(lhs, rhs); }
+auto pandac_assign_int_div(T&& lhs, const U& rhs) { return lhs = pandac_int64_div(lhs, rhs); }
 
 template<typename T, typename U>
 auto pandac_assign_mod(T&& lhs, const U& rhs) { return lhs = pandac_mod(lhs, rhs); }
@@ -399,7 +399,7 @@ auto pandac_eq(const T& a, const U& b) {
         PandaVar pa(a); PandaVar pb(b);
         if (pa.data.type() == typeid(std::string) || pb.data.type() == typeid(std::string)) return PandaVar(static_cast<std::string>(pa) == static_cast<std::string>(pb));
         if (pa.data.type() == typeid(double) || pb.data.type() == typeid(double)) return PandaVar(static_cast<double>(pa) == static_cast<double>(pb));
-        return PandaVar(static_cast<int>(pa) == static_cast<int>(pb));
+        return PandaVar(static_cast<int64_t>(pa) == static_cast<int64_t>(pb));
     } else if constexpr (std::is_constructible_v<std::string, decltype(a)> && std::is_constructible_v<std::string, decltype(b)>) {
         return PandaVar(pandac_str(a) == pandac_str(b));
     } else {
@@ -418,7 +418,7 @@ auto pandac_less(const T& a, const U& b) {
         PandaVar pa(a); PandaVar pb(b);
         if (pa.data.type() == typeid(std::string) && pb.data.type() == typeid(std::string)) return PandaVar(static_cast<std::string>(pa) < static_cast<std::string>(pb));
         if (pa.data.type() == typeid(double) || pb.data.type() == typeid(double)) return PandaVar(static_cast<double>(pa) < static_cast<double>(pb));
-        return PandaVar(static_cast<int>(pa) < static_cast<int>(pb));
+        return PandaVar(static_cast<int64_t>(pa) < static_cast<int64_t>(pb));
     } else if constexpr (std::is_constructible_v<std::string, decltype(a)> && std::is_constructible_v<std::string, decltype(b)>) {
         return PandaVar(pandac_str(a) < pandac_str(b));
     } else {
@@ -432,7 +432,7 @@ auto pandac_less_eq(const T& a, const U& b) {
         PandaVar pa(a); PandaVar pb(b);
         if (pa.data.type() == typeid(std::string) && pb.data.type() == typeid(std::string)) return PandaVar(static_cast<std::string>(pa) <= static_cast<std::string>(pb));
         if (pa.data.type() == typeid(double) || pb.data.type() == typeid(double)) return PandaVar(static_cast<double>(pa) <= static_cast<double>(pb));
-        return PandaVar(static_cast<int>(pa) <= static_cast<int>(pb));
+        return PandaVar(static_cast<int64_t>(pa) <= static_cast<int64_t>(pb));
     } else if constexpr (std::is_constructible_v<std::string, decltype(a)> && std::is_constructible_v<std::string, decltype(b)>) {
         return PandaVar(pandac_str(a) <= pandac_str(b));
     } else {
