@@ -47,84 +47,67 @@ std::vector<std::string> split(const std::string &s, char delimiter) {
     return tokens;
 }
 
-std::pair<std::vector<Compiler::Keyword>, std::vector<Compiler::TypeBinder>> readConf(const std::string& filePath) {
-    std::ifstream keywordsConfig(filePath);
+namespace {
+    void loadLibraryConfig(const std::filesystem::path& confPath) {
+        if (!std::filesystem::exists(confPath)) return;
 
-    std::vector<Compiler::Keyword> keywords;
-    std::vector<Compiler::TypeBinder> typeBinders;
+        std::ifstream inConf(confPath);
+        std::string confLine;
+        bool parsingCppLibs = false;
 
-    if (keywordsConfig.is_open()) {
-        std::string line;
-        bool parsingCommands = false;
-        bool parsingTypeBinders = false;
-
-        while (std::getline(keywordsConfig, line)) {
-            if (line.find("Commands = {") != std::string::npos) {
-                parsingCommands = true;
+        while (std::getline(inConf, confLine)) {
+            if (confLine.find("CppLibraries = {") != std::string::npos) {
+                parsingCppLibs = true;
                 continue;
             }
-            if (line.find("TypeBinders = {") != std::string::npos) {
-                parsingTypeBinders = true;
-                continue;
-            }
-            if (line.find('}') != std::string::npos && line.find('{') == std::string::npos) {
-                parsingCommands = false;
-                parsingTypeBinders = false;
-                continue;
-            }
-
-            size_t openBrace = line.find('{');
-            size_t closeBrace = line.rfind('}');
-
-            if (openBrace == std::string::npos || closeBrace == std::string::npos || closeBrace <= openBrace)
-                continue;
-
-            std::string content = line.substr(openBrace + 1, closeBrace - openBrace - 1);
-            std::vector<std::string> parts = split(content, '@');
-
-            if (parsingCommands) {
-                if (parts.size() >= 3) {
-                    std::string name = parts[0];
-                    const std::string& patternStr = parts[1];
-                    const std::string& funcStr = parts[2];
-                    size_t flags = 0;
-                    if (parts.size() >= 4) { try { flags = std::stoul(parts[3]); } catch(...) { flags = 0; } }
-
-                    if (name.empty() || funcStr.empty()) continue;
-                    if (name == "print") CodeConvertion::cppLibrariesUsed.insert("iostream");
-
-                    bool found = false;
-                    for (auto &existing : keywords) {
-                        if (existing.name == name) {
-                            existing.maps.emplace_back(patternStr, funcStr);
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) keywords.emplace_back(name, std::vector{std::make_pair(patternStr, funcStr)}, flags);
+            if (parsingCppLibs) {
+                if (confLine.find('}') != std::string::npos) {
+                    parsingCppLibs = false;
+                    continue;
                 }
-            }
-            else if (parsingTypeBinders) {
-                if (parts.size() >= 2) {
-                    std::string cppName = parts[0];
-                    std::string pandaName = parts[1];
-                    int varTypeInt = static_cast<int>(Compiler::VarType::None);
-                    size_t flags = 0;
-                    if (parts.size() > 2) { try { varTypeInt = std::stoi(parts[2]); } catch(...) {} }
-                    if (parts.size() > 3) { try { flags = std::stoul(parts[3]); } catch(...) {} }
-                    typeBinders.emplace_back(cppName, pandaName, static_cast<Compiler::VarType>(varTypeInt), flags);
+                size_t first = confLine.find_first_not_of(" \t\r\n");
+                if (first == std::string::npos) continue;
+                size_t last = confLine.find_last_not_of(" \t\r\n");
+                std::string libName = confLine.substr(first, (last - first + 1));
+                if (!libName.empty()) {
+                    CodeConvertion::cppLibrariesUsed.insert(libName);
                 }
             }
         }
-        keywordsConfig.close();
+        inConf.close();
     }
-    typeBinders.emplace_back("", "", Compiler::VarType::None, 0);
-    return std::make_pair(keywords, typeBinders);
+
+    std::string loadLibrarySource(const std::string& item, bool log) {
+        std::string code;
+        std::filesystem::path libFolder = "../libraries/" + item;
+        std::filesystem::path cppPath = libFolder / (item + ".cpp");
+        std::filesystem::path confPath = libFolder / (item + ".conf");
+
+        if (!std::filesystem::exists(cppPath))
+            cppPath = "../libraries/" + item + ".cpp";
+
+        code += "//START OF BLOCK: " + item + "\n\n";
+        std::ifstream inLib(cppPath);
+        if (inLib.is_open()) {
+            std::string libLine;
+            while (std::getline(inLib, libLine))
+                code += libLine + "\n";
+            inLib.close();
+        }
+        else if (log) Notifier::notifyInfo("Warning: Could not find source for library " + item);
+        code += "//END OF BLOCK: " + item + "\n\n";
+
+        loadLibraryConfig(confPath);
+        return code;
+    }
 }
 
 std::string Compiler::run(std::stringstream& input, bool log) {
     std::stringstream output;
-    auto [keywords, typeBinders] = readConf("../config/default.conf");
+
+    std::vector<Compiler::Keyword> keywords;
+    std::vector<Compiler::TypeBinder> typeBinders;
+    typeBinders.emplace_back("", "", Compiler::VarType::None, 0);
 
     std::string mainCode = CodeConvertion::convert(input, keywords, typeBinders);
 
@@ -141,51 +124,7 @@ std::string Compiler::run(std::stringstream& input, bool log) {
     }
 
     for (auto &item: sortedLibs) {
-        std::filesystem::path libFolder = "../libraries/" + item;
-        std::filesystem::path cppPath = libFolder / (item + ".cpp");
-        std::filesystem::path confPath = libFolder / (item + ".conf");
-
-        if (!std::filesystem::exists(cppPath))
-            cppPath = "../libraries/" + item + ".cpp";
-
-        pandaClibraries += "//START OF BLOCK: " + item + "\n\n";
-        std::ifstream inLib(cppPath);
-        if (inLib.is_open()) {
-            std::string libLine;
-            while (std::getline(inLib, libLine))
-                pandaClibraries += libLine + "\n";
-            inLib.close();
-        }
-        else if (log) Notifier::notifyInfo("Warning: Could not find source for library " + item);
-        pandaClibraries += "//END OF BLOCK: " + item + "\n\n";
-
-        if (std::filesystem::exists(confPath)) {
-            std::ifstream inConf(confPath);
-            std::string confLine;
-            bool parsingCppLibs = false;
-            while (std::getline(inConf, confLine)) {
-                if (confLine.find("CppLibraries = {") != std::string::npos) {
-                    parsingCppLibs = true;
-                    continue;
-                }
-                if (parsingCppLibs) {
-                    if (confLine.find('}') != std::string::npos) {
-                        parsingCppLibs = false;
-                        continue;
-                    }
-
-                    size_t first = confLine.find_first_not_of(" \t\r\n");
-                    if (first == std::string::npos) continue;
-                    size_t last = confLine.find_last_not_of(" \t\r\n");
-                    std::string libName = confLine.substr(first, (last - first + 1));
-
-                    if (!libName.empty()) {
-                        CodeConvertion::cppLibrariesUsed.insert(libName);
-                    }
-                }
-            }
-            inConf.close();
-        }
+        pandaClibraries += loadLibrarySource(item, log);
     }
 
     for (auto &item: CodeConvertion::cppLibrariesUsed)
