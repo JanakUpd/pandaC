@@ -207,6 +207,10 @@ void Lexer::tokenize(const std::string& input) {
             ++i;
             continue;
         }
+        if (c == '.' && i + 1 < input.length() && std::isdigit(input[i + 1])) {
+            current_atom += c;
+            continue;
+        }
         if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' ||
             c == '(' || c == ')' ||
             c == '[' || c == ']' ||
@@ -565,6 +569,22 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                           },
 
                           [&](const FunctionCall &func) -> std::string {
+                              if (std::holds_alternative<Operator>(func.target->value)) {
+                                  const auto& op = std::get<Operator>(func.target->value);
+                                  if (op.symbol == ".") {
+                                      std::string obj_str = toCppString(*func.target->lhs, indentLevel, typeBinders);
+                                      std::string method_name = toCppString(*func.target->rhs, indentLevel, typeBinders);
+
+                                      std::string args_str = "{";
+                                      for (size_t i = 0; i < func.arguments.size(); ++i) {
+                                          args_str += toCppString(*func.arguments[i], indentLevel, typeBinders);
+                                          if (i < func.arguments.size() - 1) args_str += ", ";
+                                      }
+                                      args_str += "}";
+
+                                      return obj_str + ".callMethod(\"" + method_name + "\", " + args_str + ")";
+                                  }
+                              }
                               std::string target_name = toCppString(*func.target, indentLevel, typeBinders);
 
                               if (target_name == "str") target_name = "pandac_str";

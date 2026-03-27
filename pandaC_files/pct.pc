@@ -4,25 +4,22 @@ using pct
 def main()
     print("PCT Library Test")
 
-    Array<str> product_names
-    product_names.data = {"Laptop", "Mouse", "Monitor", "Keyboard", "HDMI Cable"}
+    product_names = ["Laptop", "Mouse", "Monitor", "Keyboard", "HDMI Cable"]
 
-    Array<int64> stock_levels
-    stock_levels.data = {15, 120, 45, 60, 200}
+    stock_levels = [15, 120, 45, 60, 200]
 
-    Array<fl2> unit_prices
-    unit_prices.data = {1200.50, 25.00, 300.99, 45.00, 12.50}
-    DataFrame inventory
+    unit_prices = [1200.50, 25.00, 300.99, 45.00, 12.50]
+    inventory = DataFrame()
 
     inventory.add_column(product_names.data, "Product")
     inventory.add_column(stock_levels.data, "Stock")
     inventory.add_column(unit_prices.data, "Price")
 
 
-    fl2 total_valuation = 0.0
+    total_valuation = 0.0
 
     for i in range(0, inventory.get_col_str("Product").size()):
-        fl2 valuation = inventory.get_col_int64("Stock")[i] * inventory.get_col_fl2("Price")[i]
+        valuation = inventory.get_col_int64("Stock")[i] * inventory.get_col_fl2("Price")[i]
         total_valuation = total_valuation + valuation
 
-    print("Total Inventory Valuation: $" + Var(total_valuation))
+    print("Total Inventory Valuation: $", total_valuation)
