@@ -60,7 +60,7 @@ void Lexer::replace(std::string &str, const std::string &from, const std::string
     }
 }
 
-void Lexer::tokenize(const std::string& input) {
+void Lexer::tokenize(const std::string &input) {
     tokens.clear();
     current_token_index = 0;
     scope_stack.clear();
@@ -414,7 +414,11 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               std::string cpp_ret_type = func.return_type;
                               if (func.name == "main") {
                                   cpp_ret_type = "int";
-                              } else if (typeBinders != nullptr && cpp_ret_type != "void" && cpp_ret_type != "int") {
+                              } else if (cpp_ret_type.empty()) cpp_ret_type = "auto";
+                              else if (cpp_ret_type == "int") cpp_ret_type = "int64_t";
+                              else if (cpp_ret_type == "str") cpp_ret_type = "std::string";
+                              else if (cpp_ret_type == "float") cpp_ret_type = "double";
+                              else if (typeBinders != nullptr && cpp_ret_type != "void" && cpp_ret_type != "int") {
                                   for (const auto &item: *typeBinders) {
                                       if (item.pandacName.empty()) continue;
                                       size_t pos = 0;
@@ -438,25 +442,10 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               std::string result = getIndent(indentLevel) + cpp_ret_type + " " + func.name + "(";
                               for (size_t i = 0; i < func.args.size(); ++i) {
                                   std::string arg_type = func.args[i].type;
-                                  if (typeBinders != nullptr && arg_type != "PandaVar") {
-                                      for (const auto &item: *typeBinders) {
-                                          if (item.pandacName.empty()) continue;
-                                          size_t pos = 0;
-                                          bool isCompound = item.pandacName.find('<') != std::string::npos;
-                                          while ((pos = arg_type.find(item.pandacName, pos)) != std::string::npos) {
-                                              bool leftOk = (
-                                                  pos == 0 || (
-                                                      !std::isalnum(arg_type[pos - 1]) && arg_type[pos - 1] != '_'));
-                                              bool rightOk = (pos + item.pandacName.size() >= arg_type.size() ||
-                                                              (!std::isalnum(arg_type[pos + item.pandacName.size()]) &&
-                                                               arg_type[pos + item.pandacName.size()] != '_'));
-                                              if (isCompound || (leftOk && rightOk)) {
-                                                  arg_type.replace(pos, item.pandacName.size(), item.cppName);
-                                                  pos += item.cppName.size();
-                                              } else pos += item.pandacName.size();
-                                          }
-                                      }
-                                  }
+                                  if (arg_type.empty()) arg_type = "auto";
+                                  else if (arg_type == "int") arg_type = "int64_t";
+                                  else if (arg_type == "str") arg_type = "std::string";
+                                  else if (arg_type == "float") arg_type = "double";
                                   result += arg_type + " " + func.args[i].name;
                                   if (i < func.args.size() - 1) result += ", ";
                               }
@@ -570,10 +559,11 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
 
                           [&](const FunctionCall &func) -> std::string {
                               if (std::holds_alternative<Operator>(func.target->value)) {
-                                  const auto& op = std::get<Operator>(func.target->value);
+                                  const auto &op = std::get<Operator>(func.target->value);
                                   if (op.symbol == ".") {
                                       std::string obj_str = toCppString(*func.target->lhs, indentLevel, typeBinders);
-                                      std::string method_name = toCppString(*func.target->rhs, indentLevel, typeBinders);
+                                      std::string method_name =
+                                              toCppString(*func.target->rhs, indentLevel, typeBinders);
 
                                       std::string args_str = "{";
                                       for (size_t i = 0; i < func.arguments.size(); ++i) {
@@ -619,24 +609,35 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                           },
                           [&](const VarDeclaration &decl) -> std::string {
                               std::string cpp_type = decl.type_name;
+
+                              if (cpp_type == "int" || cpp_type == "int64") cpp_type = "int64_t";
+                              else if (cpp_type == "float" || cpp_type == "double") cpp_type = "double";
+                              else if (cpp_type == "str" || cpp_type == "string") cpp_type = "std::string";
+                              else if (cpp_type == "bool") cpp_type = "bool";
+                              else if (cpp_type == "list") cpp_type = "PandaCList";
+                              else if (cpp_type == "dict") cpp_type = "PandaCDict";
+
+                              else if (cpp_type.empty() || cpp_type == "auto") cpp_type = "auto";
+
                               if (typeBinders != nullptr) {
                                   for (const auto &item: *typeBinders) {
                                       if (item.pandacName.empty()) continue;
                                       size_t pos = 0;
-                                      bool isCompound = item.pandacName.find('<') != std::string::npos;
-
+                                      bool isCompound = item.pandacName.find(" ") != std::string::npos;
                                       while ((pos = cpp_type.find(item.pandacName, pos)) != std::string::npos) {
-                                          bool leftOk = (
-                                              pos == 0 || (
-                                                  !std::isalnum(cpp_type[pos - 1]) && cpp_type[pos - 1] != '_'));
-                                          bool rightOk = (pos + item.pandacName.size() >= cpp_type.size() ||
-                                                          (!std::isalnum(cpp_type[pos + item.pandacName.size()]) &&
-                                                           cpp_type[pos + item.pandacName.size()] != '_'));
-
+                                          bool leftOk =
+                                                  (pos == 0) || !std::isalnum(cpp_type[pos - 1]) && cpp_type[pos - 1] !=
+                                                  '_';
+                                          bool rightOk =
+                                                  (pos + item.pandacName.size() == cpp_type.size()) || !std::isalnum(
+                                                      cpp_type[pos + item.pandacName.size()]) && cpp_type[
+                                                      pos + item.pandacName.size()] != '_';
                                           if (isCompound || (leftOk && rightOk)) {
                                               cpp_type.replace(pos, item.pandacName.size(), item.cppName);
                                               pos += item.cppName.size();
-                                          } else pos += item.pandacName.size();
+                                          } else {
+                                              pos += item.pandacName.size();
+                                          }
                                       }
                                   }
                               }
@@ -648,9 +649,8 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               return result;
                           },
                           [&](const IndexAccess &idx) -> std::string {
-                              return toCppString(*idx.array_expr, indentLevel, typeBinders) + ".pandac_getitem(" +
-                                     toCppString(
-                                         *idx.index_expr, indentLevel, typeBinders) + ")";
+                              return toCppString(*idx.array_expr, indentLevel, typeBinders) +
+                                     "[" + toCppString(*idx.index_expr, indentLevel, typeBinders) + "]";
                           },
                           [&](auto &&) -> std::string {
                               return "/* UNHANDLED AST NODE */";
@@ -730,7 +730,7 @@ Expression Lexer::parseFunctionDeclaration() {
     if (peek().lexeme != ")") {
         while (true) {
             Token arg_first = consume();
-            std::string arg_type = "PandaVar";
+            std::string arg_type = "auto";
             std::string arg_name = arg_first.lexeme;
 
             if (peek().type == TokenType::Atom) {
@@ -920,7 +920,7 @@ Expression Lexer::parseStatement() {
                 std::string var_name = std::get<Atom>(left_expr.value).name;
                 if (!isDeclared(var_name)) {
                     declareVar(var_name);
-                    return Expression{VarDeclaration{"PandaVar", var_name, std::move(right_expr)}, nullptr, nullptr};
+                    return Expression{VarDeclaration{"auto", var_name, std::move(right_expr)}, nullptr, nullptr};
                 }
             }
 
