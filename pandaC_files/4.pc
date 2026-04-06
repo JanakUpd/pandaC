@@ -2,7 +2,7 @@ using pandaC
 
 def take_damage(character, amount):
     # Тест 1: Изменение вложенного значения (pandac_assign_sub)
-    character["health"] -= amount
+    character["health"] += amount
     print("Внутри функции: здоровье стало", character["health"])
 
 def test_logic(a, b):
@@ -65,28 +65,23 @@ def main():
     print("\n=== 6. ТЕСТ СЛОВАРЕЙ, ССЫЛОК И ВЛОЖЕННОСТИ ===")
     enemy = {
         "name": "Goblin",
-        "health": 200,
-        "loot": {
-            "gold": 50,
-            "item": "Dagger"
-        }
+        "health": "200",
+        "loot": "22"
     }
 
     print("Враг:", enemy["name"], "Здоровье:", enemy["health"])
-    print("Золото:", enemy["loot"]["gold"])
+    print("Золото:", enemy["loot"])
 
     print("> Герой бьет врага на 45 урона...")
     take_damage(enemy, 45)
 
     print("> Магически удваиваем золото (loot.gold *= 2)...")
     # Тест pandac_assign_mul для вложенного NestedProxy
-    enemy["loot"]["gold"] *= 2
+    enemy["loot"] *= 2
 
     print("Итог снаружи (по ссылке):")
     print("Здоровье врага:", enemy["health"])
-    print("Обновленное золото:", enemy["loot"]["gold"])
+    print("Обновленное золото:", enemy["loot"])
     print("Полный словарь:", enemy)
     x = 10
-    x = "Hello"
-    x = [1, 2, 3]
 

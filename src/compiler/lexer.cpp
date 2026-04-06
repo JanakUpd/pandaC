@@ -399,13 +399,16 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                           [&](const DictLiteral &dict) -> std::string {
                               std::string result = "make_pandac_dict({";
                               for (size_t i = 0; i < dict.elements.size(); ++i) {
-                                  result += "{" + toCppString(*dict.elements[i].first, indentLevel, typeBinders) +
-                                          ", " + toCppString(*dict.elements[i].second, indentLevel, typeBinders) + "}";
+                                  // Добавлено PandaCKVPair перед внутренними скобками!
+                                  result += "PandaCKVPair{" + toCppString(
+                                              *dict.elements[i].first, indentLevel, typeBinders) + ", " +
+                                          toCppString(*dict.elements[i].second, indentLevel, typeBinders) + "}";
                                   if (i < dict.elements.size() - 1) result += ", ";
                               }
                               result += "})";
                               return result;
                           },
+
 
                           [&](const UsingStatement &use_stmt) -> std::string {
                               return "// using " + use_stmt.lib_name;
@@ -455,7 +458,7 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               std::string body_str = toCppString(*func.body, indentLevel, typeBinders);
 
                               if (!body_str.empty() && body_str.back() == '}') {
-                                  std::string default_ret = (func.name == "main") ? "return 0;" : "return PandaVar();";
+                                  std::string default_ret = (func.name == "main") ? "return 0;" : "return;";
                                   body_str.pop_back();
                                   body_str += getIndent(indentLevel + 1) + default_ret + "\n" + getIndent(indentLevel) +
                                           "}";
@@ -713,7 +716,7 @@ Expression Lexer::parseFunctionDeclaration() {
     consume();
 
     Token first_token = consume();
-    std::string return_type = "PandaVar";
+    std::string return_type = "auto";
     std::string func_name = first_token.lexeme;
 
     if (peek().lexeme != "(") {

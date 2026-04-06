@@ -6,7 +6,6 @@
 #include <type_traits>
 #include <stdexcept>
 #include <sstream>
-#include <initializer_list>
 
 namespace PandaC {
 
@@ -36,12 +35,26 @@ public:
 };
 
 template <typename K, typename V>
+struct PandaCKVPair {
+    K key;
+    V value;
+};
+
+template <typename K, typename V>
+PandaCKVPair(K, V) -> PandaCKVPair<K, V>;
+
+template <typename K, typename V>
 class PandaCDict {
 public:
     std::unordered_map<K, V> data;
 
     PandaCDict() = default;
-    PandaCDict(std::initializer_list<std::pair<const K, V>> init) : data(init) {}
+
+    PandaCDict(std::initializer_list<PandaCKVPair<K, V>> init) {
+        for (const auto& kv : init) {
+            data[kv.key] = kv.value;
+        }
+    }
 
     int64_t length() const { return static_cast<int64_t>(data.size()); }
 
@@ -56,12 +69,45 @@ public:
 };
 
 template <typename T>
+std::ostream& operator<<(std::ostream& os, const PandaCList<T>& list) {
+    os << "[";
+    bool first = true;
+    for (const auto& item : list.data) {
+        if (!first) os << ", ";
+        if constexpr (std::is_same_v<T, std::string>) os << "'" << item << "'";
+        else os << item;
+        first = false;
+    }
+    os << "]";
+    return os;
+}
+
+template <typename K, typename V>
+std::ostream& operator<<(std::ostream& os, const PandaCDict<K, V>& dict) {
+    os << "{";
+    bool first = true;
+    for (const auto& kv : dict.data) {
+        if (!first) os << ", ";
+
+        if constexpr (std::is_same_v<K, std::string>) os << "'" << kv.first << "': ";
+        else os << kv.first << ": ";
+
+        if constexpr (std::is_same_v<V, std::string>) os << "'" << kv.second << "'";
+        else os << kv.second;
+
+        first = false;
+    }
+    os << "}";
+    return os;
+}
+
+template <typename T>
 inline PandaCList<T> make_pandac_list(std::initializer_list<T> init) {
     return PandaCList<T>(init);
 }
 
 template <typename K, typename V>
-inline PandaCDict<K, V> make_pandac_dict(std::initializer_list<std::pair<const K, V>> init) {
+inline PandaCDict<K, V> make_pandac_dict(std::initializer_list<PandaCKVPair<K, V>> init) {
     return PandaCDict<K, V>(init);
 }
 
@@ -118,7 +164,11 @@ inline PandaRange range(long long end) { return PandaRange(0, end, 1); }
 template <typename T>
 std::string pandac_str(const T& val) {
     if constexpr (std::is_same_v<T, std::string>) return val;
-    else return std::to_string(val);
+    else {
+        std::stringstream ss;
+        ss << val;
+        return ss.str();
+    }
 }
 
 template <typename T>
@@ -144,6 +194,17 @@ bool pandac_bool(const T& val) {
 }
 
 template <typename A, typename B>
+inline auto pandac_mul(const A& a, const B& b) {
+    if constexpr (std::is_same_v<A, std::string> && std::is_integral_v<B>) {
+        std::string res; for(B i = 0; i < b; ++i) res += a; return res;
+    } else if constexpr (std::is_integral_v<A> && std::is_same_v<B, std::string>) {
+        std::string res; for(A i = 0; i < a; ++i) res += b; return res;
+    } else {
+        return a * b;
+    }
+}
+
+template <typename A, typename B>
 inline auto pandac_add(const A& a, const B& b) {
     if constexpr (std::is_same_v<A, std::string> || std::is_same_v<B, std::string>) {
         return pandac_str(a) + pandac_str(b);
@@ -153,7 +214,6 @@ inline auto pandac_add(const A& a, const B& b) {
 }
 
 template <typename A, typename B> inline auto pandac_sub(const A& a, const B& b) { return a - b; }
-template <typename A, typename B> inline auto pandac_mul(const A& a, const B& b) { return a * b; }
 template <typename A, typename B> inline auto pandac_div(const A& a, const B& b) { return a / b; }
 template <typename A, typename B> inline auto pandac_int64_div(const A& a, const B& b) { return static_cast<int64_t>(a) / static_cast<int64_t>(b); }
 template <typename A, typename B> inline auto pandac_mod(const A& a, const B& b) {
@@ -168,25 +228,41 @@ template <typename A, typename B> inline auto pandac_less(const A& a, const B& b
 template <typename A, typename B> inline auto pandac_less_eq(const A& a, const B& b) { return a <= b; }
 template <typename A, typename B> inline auto pandac_greater(const A& a, const B& b) { return a > b; }
 template <typename A, typename B> inline auto pandac_greater_eq(const A& a, const B& b) { return a >= b; }
-
 template <typename A, typename B> inline auto pandac_and(const A& a, const B& b) { return a && b; }
 template <typename A, typename B> inline auto pandac_or(const A& a, const B& b) { return a || b; }
 template <typename A> inline auto pandac_negate(const A& a) { return !a; }
 
-template <typename A, typename B> inline A& pandac_assign(A& lhs, const B& rhs) { lhs = rhs; return lhs; }
+template <typename A, typename B> inline A& pandac_assign(A& lhs, const B& rhs) { 
+    lhs = rhs; 
+    return lhs; 
+}
 
-template <typename A, typename B>
-inline A& pandac_assign_add(A& lhs, const B& rhs) {
+template <typename A, typename B> 
+inline A& pandac_assign_add(A& lhs, const B& rhs) { 
     if constexpr (std::is_same_v<A, std::string> || std::is_same_v<B, std::string>) {
         lhs = pandac_str(lhs) + pandac_str(rhs);
     } else {
-        lhs += rhs;
+        lhs += rhs; 
     }
-    return lhs;
+    return lhs; 
 }
 
-template <typename A, typename B> inline A& pandac_assign_sub(A& lhs, const B& rhs) { lhs -= rhs; return lhs; }
-template <typename A, typename B> inline A& pandac_assign_mul(A& lhs, const B& rhs) { lhs *= rhs; return lhs; }
+template <typename A, typename B> 
+inline A& pandac_assign_sub(A& lhs, const B& rhs) { 
+    lhs -= rhs; 
+    return lhs; 
+}
+
+template <typename A, typename B> 
+inline A& pandac_assign_mul(A& lhs, const B& rhs) { 
+    if constexpr (std::is_same_v<A, std::string> && std::is_integral_v<B>) {
+        std::string res; for(B i = 0; i < rhs; ++i) res += lhs; lhs = res;
+    } else {
+        lhs *= rhs; 
+    }
+    return lhs; 
+}
+
 template <typename A, typename B> inline A& pandac_assign_div(A& lhs, const B& rhs) { lhs /= rhs; return lhs; }
 template <typename A, typename B> inline A& pandac_assign_int_div(A& lhs, const B& rhs) { lhs = static_cast<int64_t>(lhs) / static_cast<int64_t>(rhs); return lhs; }
 template <typename A, typename B> inline A& pandac_assign_mod(A& lhs, const B& rhs) {
