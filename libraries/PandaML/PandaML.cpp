@@ -1,15 +1,6 @@
 namespace PandaML{
-    using Vector = std::vector<double>;
-    using Matrix = std::vector<Vector>;
-
-
     void validate_matrix(const Matrix& X) {
         if (X.empty()) throw std::invalid_argument("Matrix is empty");
-        const uint64_t m = X[0].size();
-        if (m == 0) throw std::invalid_argument("Matrix has zero columns");
-        for (const auto& row : X) {
-            if (row.size() != m) throw std::invalid_argument("Matrix rows have different sizes");
-        }
     }
 
     void validate_supervised_dataset(const Matrix& X, const Vector& y) {
@@ -128,7 +119,7 @@ namespace PandaML{
     }
 
 
-    class IModel : public PandaObject{
+    class IModel {
     public:
         virtual ~IModel() = default;
     };
@@ -137,31 +128,12 @@ namespace PandaML{
     public:
         virtual void fit(const Matrix& X, const Vector& y) = 0;
         virtual double predict(const Vector& x) const = 0;
-        std::string getClassName() const override { return "IModel"; }
-        PandaC::PandaVar callMethod(const std::string& name, const std::vector<PandaC::PandaVar>& args) override {
-            if (name == "fit" && args.size() == 2) {
-                this->fit(static_cast<Matrix>(args[0]), static_cast<Vector>(args[1]));
-                return PandaC::PandaVar();
-            }
-            if (name == "predict" && args.size() == 1) {
-                return PandaC::PandaVar(this->predict(static_cast<Vector>(args[0])));
-            }
-            return IModel::callMethod(name, args);
-        }
         virtual ~ISupervisedModel() = default;
     };
 
     class IUnsupervisedModel : public IModel {
     public:
         virtual void fit(const Matrix& X) = 0;
-
-        PandaC::PandaVar callMethod(const std::string& name, const std::vector<PandaC::PandaVar>& args) override {
-            if (name == "fit" && args.size() == 1) {
-                this->fit(static_cast<Matrix>(args[0]));
-                return PandaC::PandaVar();
-            }
-            return IModel::callMethod(name, args);
-        }
         virtual ~IUnsupervisedModel() = default;
     };
 
@@ -589,13 +561,6 @@ namespace PandaML{
         uint64_t predict_cluster(const Vector& x) const {
             if (centroids_.empty()) throw std::runtime_error("KMeans is not fitted");
             return nearest_centroid(x);
-        }
-        PandaC::PandaVar callMethod(const std::string& name, const std::vector<PandaC::PandaVar>& args) override {
-            if (name == "predict" && args.size() == 1) {
-                double result = static_cast<double>(this->predict_cluster(static_cast<Vector>(args[0])));
-                return PandaC::PandaVar(result);
-            }
-            return IUnsupervisedModel::callMethod(name, args);
         }
 
         const Matrix& centroids() const {return centroids_;}

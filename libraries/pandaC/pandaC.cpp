@@ -67,6 +67,65 @@ public:
         return it->second;
     }
 };
+    // class Vector {
+    //     std::vector<double> data;
+    //     size_t dataSize;
+    // public:
+    //     double operator[] (const size_t& ind) {
+    //         return data[ind];
+    //     }
+    //     Vector(PandaCList<double> data) {
+    //         dataSize = data.length();
+    //         this->data.reserve(dataSize);
+    //         for (size_t i = 0; i < num_rows; ++i) {
+    //             if (data[i].length() != num_cols) throw std::runtime_error("All rows must have the same number of columns");
+    //             for (size_t j = 0; j < num_cols; ++j) {
+    //                 this->data.push_back(data[i][j]);
+    //             }
+    //         }
+    //     }
+    //     size_t getLength() {
+    //         return num_rows;
+    //     }
+    //     bool empty() const {
+    //         return data.empty();
+    //     }
+    // };
+class Matrix {
+    std::vector<double> data;
+    size_t num_cols;
+    size_t num_rows;
+public:
+    double operator[] (const size_t& col, const size_t &row) {
+        return data[row * num_cols + col];
+    }
+    // double operator[] (const size_t& ind) {
+    //     Vector res = Vector(num_rows);
+    //
+    //     return data[ind];
+    // }
+    Matrix(PandaCList<PandaCList<double>> data) {
+        num_rows = data.length();
+        num_cols = data[0].length();
+        this->data.reserve(num_rows * num_cols);
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (data[i].length() != num_cols) throw std::runtime_error("All rows must have the same number of columns");
+            for (size_t j = 0; j < num_cols; ++j) {
+                this->data.push_back(data[i][j]);
+            }
+        }
+    }
+    size_t getCols(){
+        return num_cols;
+    }
+    size_t getRows() {
+        return num_rows;
+    }
+    bool empty() const {
+        return data.empty();
+    }
+};
+
 
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const PandaCList<T>& list) {
@@ -175,11 +234,6 @@ template <typename T>
 int64_t pandac_int(const T& val) {
     if constexpr (std::is_same_v<T, std::string>) return std::stoll(val);
     else return static_cast<int64_t>(val);
-}
-
-template <typename T>
-int64_t pandac_int64(const T& val) {
-    return pandac_int(val);
 }
 
 template <typename T>

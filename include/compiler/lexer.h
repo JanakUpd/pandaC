@@ -11,6 +11,8 @@
 enum class TokenType {
     Operator,
     Atom,
+    Int,
+    Float,
     String,
     Eof,
     Newline,
@@ -97,6 +99,12 @@ struct StringLiteral {
 struct DictLiteral {
     std::vector<std::pair<ExprPtr, ExprPtr>> elements;
 };
+struct IntConst {
+    std::string value;
+};
+struct FloatConst {
+    std::string value;
+};
 
 struct Expression {
     std::variant<
@@ -115,7 +123,9 @@ struct Expression {
         ForStatement,
         WhileStatement,
         StringLiteral,
-        DictLiteral
+        DictLiteral,
+        IntConst,
+        FloatConst
     > value;
     ExprPtr lhs = nullptr;
     ExprPtr rhs = nullptr;

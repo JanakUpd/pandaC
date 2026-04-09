@@ -3,10 +3,8 @@ using PandaML
 
 def main():
     print("ML Library Test")
-    Matr<fl2> x_train
-    x_train.data = [[1.0], [2.0], [3.0], [4.0], [5.0]]
+    x_train = [[1.0], [2.0], [3.0], [4.0], [5.0]]
 
-    Array<fl2> y_train
     y_train.data = [3.0, 5.0, 7.0, 9.0, 11.0]
 
     LinearRegression model(x_train.cols())

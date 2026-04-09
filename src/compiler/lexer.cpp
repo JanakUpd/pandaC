@@ -60,6 +60,98 @@ void Lexer::replace(std::string &str, const std::string &from, const std::string
     }
 }
 
+
+template<class... Ts>
+struct overloaded : Ts... {
+    using Ts::operator()...;
+};
+
+template<class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
+
+bool containsReturnStatement(const Expression &expr) {
+    return std::visit(
+        overloaded{
+            [](const Atom &atom) -> bool {
+                return false;
+            },
+            [](const StringLiteral &str) -> bool {
+                return false;
+            },
+            [&](const DictLiteral &dict) -> bool {
+                return false;
+            },
+            [&](const Operator &op_val) -> bool {
+                return false;
+            },
+            [&](const FunctionCall &func) -> bool {
+                return false;
+            },
+            [&](const ArrayLiteral &arr) -> bool {
+                return false;
+            },
+            [&](const IndexAccess &idx) -> bool {
+                return false;
+            },
+            [&](const VarDeclaration &decl) -> bool {
+                return false;
+            },
+            [&](const Block &block) -> bool {
+                for (const auto &stmt: block.statements)
+                    if (containsReturnStatement(*stmt))
+                        return true;
+                return false;
+            },
+            [&](const Program &prog) -> bool {
+                for (const auto &stmt: prog.statements)
+                    if (containsReturnStatement(*stmt))
+                        return true;
+                return false;
+            },
+            [&](const WhileStatement &w_stmt) -> bool {
+                return containsReturnStatement(*w_stmt.body);
+            },
+            [&](const ForStatement &f_stmt) -> bool {
+                return containsReturnStatement(*f_stmt.body);
+            },
+            [&](const IfStatement &if_stmt) -> bool {
+                return containsReturnStatement(*if_stmt.body) || (
+                           if_stmt.else_body && containsReturnStatement(*if_stmt.else_body));
+            },
+            [&](const FunctionDeclaration &func) -> bool {
+                return containsReturnStatement(*func.body);
+            },
+            [&](const ReturnStatement &ret) -> bool {
+                return true;
+            },
+            [](const UsingStatement &use_stmt) -> bool {
+                return false;
+            },
+            [](auto &&) -> bool {
+                return false;
+            }
+        },
+        expr.value
+    );
+}
+
+bool isDigit(std::string s) {
+    for (const char& c: s)
+        if (!std::isdigit(c))
+            return false;
+    return true;
+}
+
+bool isFloat(std::string s) {
+    uint8_t hasPoint = false;
+    for (const char& c: s)
+        if (!std::isdigit(c))
+            return false;
+        else if (c == '.')
+            ++hasPoint;
+    return hasPoint == 1;
+}
+
 void Lexer::tokenize(const std::string &input) {
     tokens.clear();
     current_token_index = 0;
@@ -72,6 +164,10 @@ void Lexer::tokenize(const std::string &input) {
                 tokens.push_back(Token{TokenType::String, current_atom});
             } else if (current_atom == "or" || current_atom == "and" || current_atom == "not") {
                 tokens.push_back(Token{TokenType::Operator, current_atom});
+            } else if (isDigit(current_atom)) {
+                tokens.push_back(Token{TokenType::Int, current_atom});
+            } else if (isFloat(current_atom)) {
+                tokens.push_back(Token{TokenType::Float, current_atom});
             } else {
                 tokens.push_back(Token{TokenType::Atom, current_atom});
             }
@@ -248,13 +344,6 @@ Expression Lexer::fromString(std::string input) {
     return Expression{Program{std::move(program_statements)}, nullptr, nullptr};
 }
 
-template<class... Ts>
-struct overloaded : Ts... {
-    using Ts::operator()...;
-};
-
-template<class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
 
 std::string Lexer::astToString(const Expression &expr) {
     return std::visit(overloaded{
@@ -362,6 +451,7 @@ static std::string getIndent(int level) {
     return std::string(level * 4, ' ');
 }
 
+
 std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                                const std::vector<Compiler::TypeBinder> *typeBinders) {
     return std::visit(overloaded{
@@ -458,7 +548,7 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                               std::string body_str = toCppString(*func.body, indentLevel, typeBinders);
 
                               if (!body_str.empty() && body_str.back() == '}') {
-                                  std::string default_ret = (func.name == "main") ? "return 0;" : "return;";
+                                  std::string default_ret = (func.name == "main") ? "return 0;" : (containsReturnStatement(*func.body) ? "" : "return;");
                                   body_str.pop_back();
                                   body_str += getIndent(indentLevel + 1) + default_ret + "\n" + getIndent(indentLevel) +
                                           "}";
@@ -568,14 +658,13 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                                       std::string method_name =
                                               toCppString(*func.target->rhs, indentLevel, typeBinders);
 
-                                      std::string args_str = "{";
+                                      std::string args_str = "";
                                       for (size_t i = 0; i < func.arguments.size(); ++i) {
                                           args_str += toCppString(*func.arguments[i], indentLevel, typeBinders);
                                           if (i < func.arguments.size() - 1) args_str += ", ";
                                       }
-                                      args_str += "}";
 
-                                      return obj_str + ".callMethod(\"" + method_name + "\", " + args_str + ")";
+                                      return obj_str + "." + method_name + "(" + args_str + ")";
                                   }
                               }
                               std::string target_name = toCppString(*func.target, indentLevel, typeBinders);
@@ -654,6 +743,12 @@ std::string Lexer::toCppString(const Expression &expr, int indentLevel,
                           [&](const IndexAccess &idx) -> std::string {
                               return toCppString(*idx.array_expr, indentLevel, typeBinders) +
                                      "[" + toCppString(*idx.index_expr, indentLevel, typeBinders) + "]";
+                          },
+                          [&](const IntConst &int_const) -> std::string {
+                                return "pandac_int(" + int_const.value + ')';
+                            },
+                          [&](const FloatConst &float_const) -> std::string {
+                                return "pandac_float(" + float_const.value + ')';
                           },
                           [&](auto &&) -> std::string {
                               return "/* UNHANDLED AST NODE */";
@@ -976,6 +1071,10 @@ Expression Lexer::parseExpression(float minBp) {
     Expression lhs;
     if (token.type == TokenType::Atom) {
         lhs = Expression{Atom{token.lexeme}, nullptr, nullptr};
+    } else if (token.type == TokenType::Int) {
+        lhs = Expression{IntConst{token.lexeme}, nullptr, nullptr};
+    } else if (token.type == TokenType::Float) {
+        lhs = Expression{FloatConst{token.lexeme}, nullptr, nullptr};
     } else if (token.type == TokenType::String) {
         lhs = Expression{StringLiteral{token.lexeme}, nullptr, nullptr};
     } else if (token.type == TokenType::Operator && token.lexeme == "(") {
